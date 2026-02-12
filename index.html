@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>新廊华小校内竞赛系统 (云端实时版)</title>
+    <title>新廊华小校内竞赛系统</title>
     
     <!-- PWA 配置支持 -->
     <meta name="theme-color" content="#f97316">
@@ -586,6 +586,13 @@
                 const adminNewItemOrg = ref('');
                 const searchQuery = ref('');
 
+                // 👨‍🎓 优化：跨班级清空选人保护 (防止学生被报到错的班级)
+                watch(() => form.value.stuClass, (newVal, oldVal) => {
+                    if (newVal !== oldVal) {
+                        form.value.selectedStudents = ['', '', ''];
+                    }
+                });
+
                 // Modals & Toasts
                 const modalState = ref({ visible: false, type: 'alert', title: '', message: '', inputValue: '', placeholder: '', icon: '', resolve: null });
                 const modalInput = ref(null);
@@ -739,11 +746,10 @@
                 };
 
                 onMounted(() => {
-                    initPWA(); // 注入 PWA Manifest
+                    initPWA(); 
                     competitionItems.value = initItemsFromStorage();
                     if(!GOOGLE_SCRIPT_URL.includes("在此处粘贴")) {
                         fetchAllData();
-                        // ⏱️ 优化限流：后台轮询间隔增加为 60 秒
                         autoRefreshTimer = setInterval(() => { fetchAllData(true); }, 60000);
                     } else {
                         isInitializing.value = false; 
@@ -811,9 +817,11 @@
 
                 const submitForm = async () => {
                     let validStudents = form.value.selectedStudents.filter(s => s);
+                    // 🔁 优化：防止老师在单次提交里重复选择了同一个学生
+                    validStudents = [...new Set(validStudents)];
+                    
                     if (validStudents.length === 0) return showDialog({ title: '提示', message: '请至少选择一名学生' });
                     
-                    // 🚫 优化：防重复报名拦截
                     const currentCatStudents = dbResults.value.filter(s => s.category === form.value.category);
                     const duplicates = [];
                     validStudents = validStudents.filter(stuName => {
@@ -965,6 +973,7 @@
                     const groupInfo = groupedResults.value.find(g => g.categoryName === categoryName);
                     const orgText = groupInfo && groupInfo.organizer ? `<div style="margin-bottom:5px;">主办单位: ${groupInfo.organizer}</div>` : '';
 
+                    // 🖨️ 优化: 使用更安全的 ES6 模板字符串拼接关闭脚本标签，防止语法报错
                     return `
                         <html><head><title>${categoryName} - ${title}</title>
                             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.1.0/style.css" />
@@ -984,12 +993,11 @@
                             <div class="subtitle">${orgText}<div>生成日期: ${date}</div></div>
                             ${tableContent}
                             <div class="signature"><div>裁判/负责人签名: ________________</div><div>日期: ________________</div></div>
-                            <script>window.onload = () => { window.print(); }<\\/script>
+                            <script>window.onload = () => { window.print(); };${'</'}script>
                         </body></html>
-                    `.replace(/<\\\/script>/g, '</' + 'script>');
+                    `;
                 };
 
-                // 打印 1: 打印名单 (只有姓名、班级、备注栏)
                 const printRoster = () => {
                     let tableContent = `<table><thead><tr><th style="width: 10%">序号</th><th style="width: 25%">班级</th><th style="width: 35%">姓名</th><th style="width: 30%">备注</th></tr></thead><tbody>`;
                     getSelectedGroupedByGrade().forEach(group => {
@@ -1007,7 +1015,6 @@
                     win.document.close();
                 };
 
-                // 打印 2: 打印评分表 (加入分数、名次栏)
                 const printScoringSheet = () => {
                     let tableContent = `<table><thead><tr><th style="width: 8%">序号</th><th style="width: 15%">班级</th><th style="width: 27%">姓名</th><th style="width: 15%">分数</th><th style="width: 15%">名次</th><th style="width: 20%">备注</th></tr></thead><tbody>`;
                     getSelectedGroupedByGrade().forEach(group => {
@@ -1025,7 +1032,6 @@
                     win.document.close();
                 };
 
-                // 打印 3: 打印成绩单 (照年级、名次打印得奖名单)
                 const printResults = () => {
                     let tableContent = `<table><thead><tr><th style="width: 20%">名次</th><th style="width: 25%">班级</th><th style="width: 35%">姓名</th><th style="width: 20%">分数</th></tr></thead><tbody>`;
                     let hasWinners = false;
@@ -1041,7 +1047,6 @@
                         if(winners.length > 0) {
                             hasWinners = true;
                             tableContent += `<tr><td colspan="4" class="grade-header">${group.gradeLabel}</td></tr>`;
-                            // 照名次权重排序
                             winners.sort((a,b) => {
                                 const diff = getRankWeight(b.rank) - getRankWeight(a.rank);
                                 if (diff !== 0) return diff;
@@ -1064,18 +1069,18 @@
                     win.document.close();
                 };
 
-                // 📊 导出 CSV Excel
+                // 📊 优化：导出 CSV 格式增强，使用双引号包裹防止名字里带有逗号导致表格错位
                 const exportCSV = () => {
                     const groupData = getSelectedGroupedByGrade();
                     const categoryName = selectedCategory.value;
-                    let csvContent = "\uFEFF"; // 添加 BOM 保证 Excel 打开不会乱码
-                    csvContent += `比赛项目：${categoryName}\n`;
-                    csvContent += `年级,班级,姓名,分数,名次\n`;
+                    let csvContent = "\uFEFF"; 
+                    csvContent += `"比赛项目：${categoryName}"\n`;
+                    csvContent += `"年级","班级","姓名","分数","名次"\n`;
 
                     groupData.forEach(group => {
                         group.classes.forEach(cls => {
                             cls.students.forEach(stu => {
-                                csvContent += `${group.gradeLabel},${cls.className},${stu.studentName},${stu.score || ''},${stu.rank || ''}\n`;
+                                csvContent += `"${group.gradeLabel}","${cls.className}","${stu.studentName}","${stu.score || ''}","${stu.rank || ''}"\n`;
                             });
                         });
                     });
@@ -1122,7 +1127,6 @@
                     else if (pwd !== false) showDialog({ title: '错误', message: '密码错误' });
                 };
 
-                // 🏆 优化：排名的权重分数 (用于自动排序)
                 const getRankWeight = (rank) => {
                     if (!rank) return 0;
                     if (rank.includes('冠')) return 10000;
@@ -1149,16 +1153,13 @@
                         const students = filtered.filter(d => d.category && d.category.trim() === catName.trim());
                         if (searchQuery.value && students.length === 0) return null;
                         
-                        // 🏆 优化核心逻辑：对当前项目下的学生进行自动排序 (按排名>分数)
                         students.sort((a, b) => {
                             const rankA = getRankWeight(a.rank);
                             const rankB = getRankWeight(b.rank);
-                            if (rankA !== rankB) return rankB - rankA; // 名次高的靠前
-
+                            if (rankA !== rankB) return rankB - rankA; 
                             const scoreA = parseFloat(a.score) || 0;
                             const scoreB = parseFloat(b.score) || 0;
-                            if (scoreA !== scoreB) return scoreB - scoreA; // 分数高的靠前
-
+                            if (scoreA !== scoreB) return scoreB - scoreA; 
                             return 0;
                         });
 
@@ -1248,7 +1249,7 @@
                     groupedResults, getSelectedGroupCount, getSelectedGroupOrganizer, getSelectedGroupedByGrade, getCategoryIcon, getRankClass,
                     modalState, handleModalConfirm, handleModalCancel, modalInput, toastState,
                     scoreModal, openScoreModal, submitScore, 
-                    printRoster, printScoringSheet, printResults, exportCSV, // Updated prints
+                    printRoster, printScoringSheet, printResults, exportCSV, 
                     deleteRegistration, startBatchEdit, cancelBatchEdit, saveBatchEdit,
                     editCategoryModal, openEditCategory, submitEditCategory,
                     enterAdmin, adminAddItem, adminDeleteItem, submitForm, fetchAllData
