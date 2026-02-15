@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>新廊华小校内竞赛系统 (云端实时版)</title>
+    <title>新廊华小校内竞赛系统</title>
     
     <!-- PWA 配置支持 -->
     <meta name="theme-color" content="#f97316">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="校内竞赛">
-    <link rel="apple-touch-icon" href="https://api.iconify.design/fxemoji/trophy.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png">
+    <link rel="apple-touch-icon" href="https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
@@ -71,13 +73,13 @@
                 <div @click="goHome" class="flex items-center space-x-2 cursor-pointer group">
                     <i class="fas fa-shapes text-yellow-200 text-2xl group-hover:scale-110 transition"></i>
                     <div>
-                        <h1 class="text-lg font-bold leading-tight">新廊华小校内竞赛系统</h1>
-                        <p class="text-xs text-orange-100 opacity-90">云端实时版</p>
+                        <h1 class="text-lg font-bold leading-tight">{{ t('school_name') }}</h1>
+                        <p class="text-xs text-orange-100 opacity-90">{{ t('system_subtitle') }}</p>
                     </div>
                 </div>
                 <div class="flex space-x-2 text-sm font-bold">
-                    <button @click="goHome" :class="{'bg-white text-orange-600 shadow-md': currentTab === 'results'}" class="px-3 py-2 rounded-lg transition duration-200 flex items-center hover:bg-orange-400">
-                        <i class="fas fa-home mr-1"></i> 大厅
+                    <button @click="goHome" :class="{'bg-white text-orange-600 shadow-md': currentTab === 'results'}" class="px-3 py-2 rounded-lg transition duration-200 flex items-center hover:bg-orange-400 hidden sm:flex">
+                        <i class="fas fa-home mr-1"></i> {{ t('nav_lobby') }}
                     </button>
                     <button @click="enterAdmin" :class="{'bg-gray-800 text-yellow-400 shadow-md': currentTab === 'admin' || isAdmin}" class="px-3 py-2 rounded-lg transition duration-200 flex items-center border border-orange-400 hover:bg-orange-600">
                         <i class="fas" :class="isAdmin ? 'fa-user-shield' : 'fa-cogs'"></i> <span class="ml-1">{{ isAdmin ? '管理员' : '管理' }}</span>
@@ -86,7 +88,7 @@
             </div>
         </nav>
 
-        <!-- Toast 飘窗提示 -->
+        <!-- Toast -->
         <transition name="fade">
             <div v-if="toastState.visible" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-[150] px-6 py-3 rounded-full shadow-lg font-bold text-sm flex items-center transition-all duration-300"
                  :class="toastState.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'">
@@ -110,7 +112,7 @@
                     <!-- 工具栏 -->
                     <div class="flex flex-row gap-3 items-center justify-between no-print">
                         <h2 v-if="!selectedCategory" class="text-xl font-bold text-gray-700 hidden sm:block">
-                            <i class="fas fa-bullhorn text-orange-500 mr-2"></i>比赛大厅
+                            <i class="fas fa-bullhorn text-orange-500 mr-2"></i>{{ t('lobby_title') }}
                         </h2>
                         <div class="flex-grow flex gap-2 justify-end items-center">
                              <div class="flex items-center text-xs text-orange-400/80 mr-1 bg-white px-2 py-1 rounded-full border border-orange-100 shadow-sm hidden sm:flex">
@@ -118,12 +120,23 @@
                                   <span :class="isInitializing ? 'bg-gray-300' : 'bg-green-400 animate-ping'" class="absolute inline-flex h-full w-full rounded-full opacity-75"></span>
                                   <span :class="isInitializing ? 'bg-gray-400' : 'bg-green-500'" class="relative inline-flex rounded-full h-2 w-2"></span>
                                 </span>
-                                {{ isInitializing ? '连接中...' : '实时同步' }}
+                                {{ isInitializing ? t('status_connecting') : t('status_live') }}
+                            </div>
+                            
+                            <div class="relative group mr-2">
+                                <button class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg flex items-center transition border border-gray-300 font-bold">
+                                    {{ currentLangLabel }}
+                                </button>
+                                <div class="absolute right-0 mt-1 w-24 bg-white rounded-lg shadow-xl border border-gray-100 hidden group-hover:block z-50 text-gray-700 overflow-hidden">
+                                    <button @click="setLang('zh')" class="w-full text-left px-4 py-2 hover:bg-orange-50 hover:text-orange-600 text-sm">中文</button>
+                                    <button @click="setLang('ms')" class="w-full text-left px-4 py-2 hover:bg-orange-50 hover:text-orange-600 text-sm">BM</button>
+                                    <button @click="setLang('en')" class="w-full text-left px-4 py-2 hover:bg-orange-50 hover:text-orange-600 text-sm">EN</button>
+                                </div>
                             </div>
 
                              <div class="relative w-full max-w-xs sm:max-w-md">
                                 <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                                <input v-model="searchQuery" type="text" placeholder="搜姓名、班级或项目..." 
+                                <input v-model="searchQuery" type="text" :placeholder="t('search_placeholder')" 
                                     class="w-full border border-orange-200 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 transition bg-white shadow-sm">
                             </div>
                             <button @click="fetchAllData(false)" class="bg-white text-orange-600 px-3 py-2 rounded-full shadow-sm border border-orange-100 hover:bg-orange-50 transition font-bold text-sm whitespace-nowrap" title="立即刷新">
@@ -134,8 +147,8 @@
 
                     <!-- 管理员提示条 -->
                     <div v-if="isAdmin" class="bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r shadow-sm flex justify-between items-center text-sm no-print">
-                        <span class="text-blue-700"><i class="fas fa-info-circle mr-1"></i> 您处于管理员模式。</span>
-                        <button @click="isAdmin=false; isBatchEditing=false; currentTab='results'" class="text-blue-400 hover:text-blue-600 underline text-xs">退出管理</button>
+                        <span class="text-blue-700"><i class="fas fa-info-circle mr-1"></i> {{ t('admin_mode_hint') }}</span>
+                        <button @click="isAdmin=false; isBatchEditing=false; currentTab='results'" class="text-blue-400 hover:text-blue-600 underline text-xs">{{ t('btn_exit_admin') }}</button>
                     </div>
 
                     <!-- 视图 A: 比赛项目列表 -->
@@ -150,20 +163,26 @@
                         <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                             <div v-for="group in groupedResults" :key="group.categoryName" 
                                  @click="selectedCategory = group.categoryName"
-                                 class="bg-white rounded-2xl shadow-md border-2 border-transparent hover:border-orange-400 hover:shadow-xl transition cursor-pointer p-6 flex flex-col items-center text-center group h-full transform hover:-translate-y-1">
+                                 class="bg-white rounded-2xl shadow-md border-2 border-transparent hover:border-orange-400 hover:shadow-xl transition cursor-pointer p-6 flex flex-col items-center text-center group h-full transform hover:-translate-y-1 relative overflow-hidden">
+                                
+                                <!-- 状态角标 -->
+                                <div v-if="group.status === 'closed'" class="absolute top-0 right-0 bg-gray-500 text-white text-xs px-2 py-1 rounded-bl-lg font-bold z-10">{{ t('status_ended') }}</div>
+
                                 <div class="w-16 h-16 rounded-full bg-orange-100 text-orange-500 flex items-center justify-center text-3xl mb-4 shadow-inner">
                                     <i :class="getCategoryIcon(group.categoryName)"></i>
                                 </div>
                                 <h3 class="text-lg font-bold text-gray-800 mb-2">{{ group.categoryName }}</h3>
                                 <div class="mt-auto w-full pt-2">
-                                    <span class="text-xs font-bold text-white bg-green-500 px-2 py-0.5 rounded-full shadow-sm">进行中</span>
-                                    <div class="text-gray-500 text-sm mt-2">已报: <span class="text-xl font-bold text-orange-600">{{ group.totalCount }}</span> 人</div>
+                                    <span :class="group.status === 'closed' ? 'bg-gray-200 text-gray-500' : 'bg-green-500 text-white'" class="text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                        {{ group.status === 'closed' ? t('status_ended') : t('label_ongoing') }}
+                                    </span>
+                                    <div class="text-gray-500 text-sm mt-2">{{ t('label_registered') }}: <span class="text-xl font-bold text-orange-600">{{ group.totalCount }}</span> {{ t('unit_person') }}</div>
                                 </div>
                             </div>
 
                             <div v-if="groupedResults.length === 0" class="col-span-full text-center py-16 bg-white rounded-xl border-2 border-dashed border-gray-300">
-                                <p class="text-gray-500 mb-4">暂无比赛项目</p>
-                                <button @click="enterAdmin" class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm">前往后台添加</button>
+                                <p class="text-gray-500 mb-4">{{ t('msg_no_competitions') }}</p>
+                                <button @click="enterAdmin" class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm">{{ t('btn_goto_add') }}</button>
                             </div>
                         </div>
                     </div>
@@ -173,19 +192,19 @@
                         <div class="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-orange-100 sticky top-16 z-30 no-print">
                             <div class="flex items-center">
                                 <button @click="exitCategory" class="text-gray-600 hover:text-orange-600 font-bold flex items-center bg-gray-100 px-3 py-1.5 rounded-lg text-sm mr-3">
-                                    <i class="fas fa-arrow-left mr-2"></i> 返回
+                                    <i class="fas fa-arrow-left mr-2"></i> {{ t('btn_back') }}
                                 </button>
                                 <div>
                                     <h2 class="text-lg font-bold text-gray-800">{{ selectedCategory }}</h2>
                                     <div class="flex items-center gap-2 mt-1">
                                         <span v-if="getSelectedGroupOrganizer()" class="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                                            <i class="fas fa-building mr-1"></i> 主办: {{ getSelectedGroupOrganizer() }}
+                                            <i class="fas fa-building mr-1"></i> {{ t('label_organizer') }}: {{ getSelectedGroupOrganizer() }}
                                         </span>
-                                        <span v-if="isBatchEditing" class="text-xs text-red-500 font-bold animate-pulse">● 录入模式</span>
+                                        <span v-if="isBatchEditing" class="text-xs text-red-500 font-bold animate-pulse">● {{ t('mode_entry') }}</span>
                                     </div>
                                 </div>
                             </div>
-                            <div v-if="!isBatchEditing" class="text-sm bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-bold">{{ getSelectedGroupCount() }} 人</div>
+                            <div v-if="!isBatchEditing" class="text-sm bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-bold">{{ getSelectedGroupCount() }} {{ t('unit_person') }}</div>
                         </div>
 
                         <!-- 详情页数据列表 -->
@@ -193,47 +212,46 @@
                             <!-- 操作按钮组 -->
                             <div v-if="!isBatchEditing" class="mb-6 flex flex-wrap justify-end gap-3 no-print">
                                 <button v-if="isAdmin" @click="startBatchEdit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold shadow text-sm flex items-center transition animate-bounce-once">
-                                    <i class="fas fa-pencil-alt mr-2"></i> 批量录入
+                                    <i class="fas fa-pencil-alt mr-2"></i> {{ t('btn_batch_entry') }}
                                 </button>
                                 
                                 <!-- 生成海报按钮 -->
-                                <button @click="openPosterModal" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm text-sm flex items-center transition">
-                                    <i class="fas fa-image mr-2"></i> 生成海报
+                                <button v-if="isAdmin" @click="openPosterModal" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm text-sm flex items-center transition">
+                                    <i class="fas fa-image mr-2"></i> {{ t('btn_poster') }}
                                 </button>
 
                                 <!-- 打印功能下拉菜单 -->
                                 <div class="relative group inline-block">
                                     <button class="bg-white border border-gray-300 text-gray-700 group-hover:bg-gray-50 px-4 py-2 rounded-lg font-bold shadow-sm text-sm flex items-center transition h-full">
-                                        <i class="fas fa-print mr-2"></i> 打印选项 <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                                        <i class="fas fa-print mr-2"></i> {{ t('btn_print_options') }} <i class="fas fa-chevron-down ml-2 text-xs"></i>
                                     </button>
                                     <div class="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 overflow-hidden">
                                         <button @click="printRoster" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition flex items-center border-b border-gray-50">
-                                            <i class="fas fa-list-ol w-5 text-center mr-2 text-blue-500"></i> 空白名单
+                                            <i class="fas fa-list-ol w-5 text-center mr-2 text-blue-500"></i> {{ t('print_roster') }}
                                         </button>
                                         <button @click="printScoringSheet" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition flex items-center border-b border-gray-50">
-                                            <i class="fas fa-clipboard-check w-5 text-center mr-2 text-orange-500"></i> 评分记录表
+                                            <i class="fas fa-clipboard-check w-5 text-center mr-2 text-orange-500"></i> {{ t('print_score_sheet') }}
                                         </button>
                                         <button @click="printResults" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-yellow-50 hover:text-yellow-600 transition flex items-center">
-                                            <i class="fas fa-trophy w-5 text-center mr-2 text-yellow-500"></i> 得奖名单
+                                            <i class="fas fa-trophy w-5 text-center mr-2 text-yellow-500"></i> {{ t('print_winners') }}
                                         </button>
                                     </div>
                                 </div>
 
                                 <button @click="goToRegister(selectedCategory)" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow text-sm flex items-center transition">
-                                    <i class="fas fa-plus-circle mr-2"></i> 新增报名
+                                    <i class="fas fa-plus-circle mr-2"></i> {{ t('btn_add_reg') }}
                                 </button>
                             </div>
-
-                            <!-- 批量编辑的操作栏 (Sticky Footer) -->
+                            
                             <div v-if="isBatchEditing" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-4 z-50 flex justify-between items-center no-print">
                                 <div class="text-sm text-gray-600">
-                                    <span v-if="isSubmitting"><i class="fas fa-spinner fa-spin mr-2"></i>正在保存...</span>
-                                    <span v-else>已进入批量录入模式，修改后请点击保存。</span>
+                                    <span v-if="isSubmitting"><i class="fas fa-spinner fa-spin mr-2"></i> {{ t('status_saving') }}</span>
+                                    <span v-else>{{ t('hint_batch_mode') }}</span>
                                 </div>
                                 <div class="flex gap-3">
-                                    <button @click="cancelBatchEdit" :disabled="isSubmitting" class="px-6 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold">取消</button>
+                                    <button @click="cancelBatchEdit" :disabled="isSubmitting" class="px-6 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold">{{ t('btn_cancel') }}</button>
                                     <button @click="saveBatchEdit" :disabled="isSubmitting" class="px-6 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg font-bold shadow-lg transform active:scale-95 transition">
-                                        <i class="fas fa-save mr-2"></i> 保存全部
+                                        <i class="fas fa-save mr-2"></i> {{ t('btn_save_all') }}
                                     </button>
                                 </div>
                             </div>
@@ -242,24 +260,23 @@
                             <div v-for="(gradeGroup, gIndex) in (isBatchEditing ? batchEditData : getSelectedGroupedByGrade())" :key="gIndex" class="mb-8 break-inside-avoid">
                                 <div class="flex items-center mb-4">
                                     <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-bold text-sm shadow-sm border border-blue-200">
-                                        {{ gradeGroup.gradeLabel }} (共 {{ gradeGroup.totalStudents }} 人)
+                                        {{ gradeGroup.translatedLabel }} ({{ t('total') }} {{ gradeGroup.totalStudents }} {{ t('unit_person') }})
                                     </span>
                                     <div class="h-px bg-blue-100 flex-grow ml-4 no-print"></div>
                                 </div>
 
-                                <!-- 普通模式 -->
                                 <div v-if="!isBatchEditing" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                     <div v-for="cls in gradeGroup.classes" :key="cls.className" class="bg-white rounded-xl p-4 border border-gray-200 shadow-sm relative overflow-hidden break-inside-avoid">
                                         <div class="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
                                             <span class="font-bold text-blue-600 text-lg">{{ cls.className }}</span>
-                                            <span class="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">{{ cls.students.length }}人</span>
+                                            <span class="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">{{ cls.students.length }}{{ t('unit_person') }}</span>
                                         </div>
                                         <ul class="space-y-2">
                                             <li v-for="stu in cls.students" :key="stu.rowIndex" class="flex justify-between items-center text-sm p-2 rounded hover:bg-gray-50 transition group">
                                                 <span class="font-medium text-gray-700 flex items-center">{{ stu.studentName }}</span>
                                                 <div class="flex items-center gap-1">
-                                                    <span v-if="stu.rank" :class="getRankClass(stu.rank)" class="text-xs px-2 py-0.5 rounded font-bold scale-90 whitespace-nowrap">{{ stu.rank }}</span>
-                                                    <span v-else-if="stu.score" class="text-gray-500 font-mono text-xs bg-gray-100 px-1 rounded">{{ stu.score }}分</span>
+                                                    <span v-if="stu.rank" :class="getRankClass(stu.rank)" class="text-xs px-2 py-0.5 rounded font-bold scale-90 whitespace-nowrap">{{ t_rank(stu.rank) }}</span>
+                                                    <span v-else-if="stu.score" class="text-gray-500 font-mono text-xs bg-gray-100 px-1 rounded">{{ stu.score }}</span>
                                                     <button v-if="isAdmin" @click.stop="deleteRegistration(stu, cls.className)" class="text-gray-300 hover:text-red-500 p-1 transition opacity-0 group-hover:opacity-100 no-print"><i class="fas fa-trash-alt"></i></button>
                                                     <button v-if="isAdmin" @click.stop="openScoreModal(stu, cls.className)" class="text-gray-300 hover:text-blue-500 p-1 transition opacity-0 group-hover:opacity-100 no-print"><i class="fas fa-pencil-alt"></i></button>
                                                 </div>
@@ -268,15 +285,14 @@
                                     </div>
                                 </div>
 
-                                <!-- 批量模式 -->
                                 <div v-else class="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden">
                                     <table class="w-full text-left border-collapse">
                                         <thead class="bg-blue-50 text-blue-800 text-xs uppercase">
                                             <tr>
-                                                <th class="p-3 border-b border-blue-100">班级</th>
-                                                <th class="p-3 border-b border-blue-100">姓名</th>
-                                                <th class="p-3 border-b border-blue-100 w-24">分数</th>
-                                                <th class="p-3 border-b border-blue-100 w-32">名次</th>
+                                                <th class="p-3 border-b border-blue-100">{{ t('th_class') }}</th>
+                                                <th class="p-3 border-b border-blue-100">{{ t('th_name') }}</th>
+                                                <th class="p-3 border-b border-blue-100 w-24">{{ t('th_score') }}</th>
+                                                <th class="p-3 border-b border-blue-100 w-32">{{ t('th_rank') }}</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-gray-100">
@@ -287,15 +303,8 @@
                                                     <td class="p-2"><input type="text" v-model="stu.score" class="w-full border border-gray-300 rounded px-2 py-1 text-sm text-center outline-none focus:ring-2 focus:ring-blue-500" placeholder="-"></td>
                                                     <td class="p-2">
                                                         <select v-model="stu.rank" class="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500">
-                                                            <option value="">(无)</option>
-                                                            <option value="冠军">冠军</option>
-                                                            <option value="亚军">亚军</option>
-                                                            <option value="季军">季军</option>
-                                                            <option value="第四名">第四名</option>
-                                                            <option value="第五名">第五名</option>
-                                                            <option value="特优奖">特优奖</option>
-                                                            <option value="优秀奖">优秀奖</option>
-                                                            <option value="安慰奖">安慰奖</option>
+                                                            <option value="">-</option>
+                                                            <option v-for="r in rankOptions" :key="r" :value="r">{{ t_rank(r) }}</option>
                                                         </select>
                                                     </td>
                                                 </tr>
@@ -304,14 +313,12 @@
                                     </table>
                                 </div>
                             </div>
-                            <!-- 底部留白给 Sticky Footer -->
                             <div v-if="isBatchEditing" class="h-20"></div>
                         </div>
                         
-                        <!-- 空数据提示 -->
                         <div v-if="getSelectedGroupCount() === 0" class="text-center py-16 bg-white rounded-xl border-2 border-dashed border-gray-200 no-print">
-                            <p class="text-gray-500 mb-4">暂无报名记录</p>
-                            <button @click="goToRegister(selectedCategory)" class="bg-orange-500 text-white px-6 py-2 rounded-full font-bold shadow hover:bg-orange-600">去报名</button>
+                            <p class="text-gray-500 mb-4">{{ t('msg_no_records') }}</p>
+                            <button @click="goToRegister(selectedCategory)" :disabled="getCategoryStatus(selectedCategory) === 'closed'" :class="getCategoryStatus(selectedCategory) === 'closed' ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'" class="text-white px-6 py-2 rounded-full font-bold shadow">{{ t('btn_go_register') }}</button>
                         </div>
                     </div>
                 </div>
@@ -324,71 +331,81 @@
                         <div class="flex items-start">
                             <div class="bg-orange-100 p-3 rounded-full mr-4"><i class="fas fa-user-edit text-orange-500 text-xl"></i></div>
                             <div>
-                                <h2 class="text-xl font-bold text-gray-800">报名录入</h2>
-                                <p class="text-gray-500 text-sm">所有选项均来自 Google Sheets 实时数据</p>
+                                <h2 class="text-xl font-bold text-gray-800">{{ t('reg_title') }}</h2>
+                                <p class="text-gray-500 text-sm">{{ t('reg_subtitle') }}</p>
                             </div>
                         </div>
-                        <button @click="goHome" class="text-gray-400 hover:text-gray-600 text-sm underline">取消</button>
+                        <button @click="goHome" class="text-gray-400 hover:text-gray-600 text-sm underline">{{ t('btn_cancel') }}</button>
                     </div>
 
-                    <!-- 报名页骨架屏 -->
-                    <div v-if="isInitializing" class="space-y-6 animate-pulse">
-                        <div class="h-20 bg-gray-200 rounded-xl"></div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div class="h-32 bg-gray-200 rounded-xl"></div>
-                            <div class="h-32 bg-gray-200 rounded-xl"></div>
-                        </div>
-                    </div>
-
-                    <form v-else @submit.prevent="submitForm" class="space-y-6">
-                        <!-- 项目 -->
+                    <form @submit.prevent="submitForm" class="space-y-6">
+                        <!-- Project Selection -->
                         <div class="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-                            <label class="block text-sm font-bold text-gray-700 mb-2">参赛项目</label>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">{{ t('label_item') }}</label>
                             <select v-model="form.category" required class="w-full rounded-lg border-2 border-yellow-300 p-3 outline-none bg-white font-medium text-gray-800">
-                                <option value="" disabled>请选择...</option>
-                                <option v-for="item in competitionItems" :key="item.name" :value="item.name">{{ item.name }}</option>
+                                <option value="" disabled>{{ t('ph_select_item') }}</option>
+                                <option v-for="item in activeCompetitions" :key="item.name" :value="item.name">{{ item.name }}</option>
                             </select>
-                            <p v-if="competitionItems.length === 0" class="text-xs text-red-500 mt-2">* 暂无项目，请联系管理员在后台添加。</p>
+                            <p v-if="activeCompetitions.length === 0" class="text-xs text-red-500 mt-2">* {{ t('msg_no_competitions') }}</p>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <!-- 班级 -->
-                            <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 h-fit">
-                                <label class="block text-sm font-bold text-blue-800 mb-2">所属班级</label>
-                                <select v-model="form.stuClass" required class="w-full rounded-lg border-2 border-blue-200 p-3 outline-none bg-white font-mono text-lg">
-                                    <option value="" disabled>选择班级</option>
-                                    <option v-for="cls in availableClasses" :key="cls" :value="cls">{{ cls }}</option>
-                                </select>
-                                <div class="mt-2 text-xs text-gray-500">
-                                    <label class="flex items-center"><input type="checkbox" v-model="keepClassInfo" class="mr-1"> 连续报名保留班级</label>
-                                </div>
-                                <div v-if="availableClasses.length === 0" class="text-xs text-red-400 mt-2">
-                                    * 未加载到班级，请检查 "Students" 表格。
-                                </div>
-                            </div>
+                        <!-- Class Groups -->
+                        <div v-for="(group, gIndex) in form.groups" :key="group.id" class="bg-blue-50 p-4 rounded-xl border border-blue-100 relative">
+                             <!-- Remove Class Group Button -->
+                            <button v-if="form.groups.length > 1" type="button" @click="removeClassGroup(gIndex)" class="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-sm" :title="t('btn_remove_class')">
+                                <i class="fas fa-times"></i>
+                            </button>
 
-                            <!-- 学生 -->
-                            <div class="bg-green-50 p-4 rounded-xl border border-green-100">
-                                <label class="block text-sm font-bold text-green-800 mb-2">选择学生 (最多3人)</label>
-                                <div v-if="!form.stuClass" class="text-gray-400 text-sm py-8 text-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">← 先选班级</div>
-                                <div v-else class="space-y-3">
-                                    <div v-for="(sel, idx) in form.selectedStudents" :key="idx" class="relative">
-                                        <span class="absolute left-3 top-3 text-xs font-bold text-gray-400">{{ idx + 1 }}.</span>
-                                        <select v-model="form.selectedStudents[idx]" class="w-full rounded-lg border border-green-200 pl-8 p-2 bg-white outline-none focus:border-green-500">
-                                            <option value="">(空)</option>
-                                            <option v-for="stuName in availableStudents" :key="stuName" :value="stuName">{{ stuName }}</option>
-                                        </select>
-                                    </div>
-                                    <div class="text-right">
-                                        <button type="button" @click="form.selectedStudents = ['', '', '']" class="text-xs text-gray-400 hover:text-red-500 underline">清空</button>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div>
+                                    <label class="block text-sm font-bold text-blue-800 mb-2">{{ t('label_class') }}</label>
+                                    <select v-model="group.class" required class="w-full rounded-lg border-2 border-blue-200 p-3 outline-none bg-white font-mono text-lg">
+                                        <option value="" disabled>{{ t('ph_select_class') }}</option>
+                                        <option v-for="cls in availableClasses" :key="cls" :value="cls">{{ cls }}</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-bold text-green-800 mb-2">{{ t('label_students') }}</label>
+                                    <div v-if="!group.class" class="text-gray-400 text-sm py-4 text-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">← {{ t('hint_select_class_first') }}</div>
+                                    <div v-else class="space-y-3">
+                                        <div v-for="(stu, sIndex) in group.students" :key="sIndex" class="flex gap-2">
+                                            <div class="relative flex-grow">
+                                                <span class="absolute left-3 top-3 text-xs font-bold text-gray-400">{{ sIndex + 1 }}.</span>
+                                                <select v-model="group.students[sIndex]" class="w-full rounded-lg border border-green-200 pl-8 p-2 bg-white outline-none focus:border-green-500">
+                                                    <option value="">{{ t('opt_empty') }}</option>
+                                                    <option v-for="stuName in getStudentsByClass(group.class)" :key="stuName" :value="stuName">{{ stuName }}</option>
+                                                </select>
+                                            </div>
+                                             <!-- Remove Student Row Button -->
+                                            <button v-if="group.students.length > 1" type="button" @click="removeStudentRow(gIndex, sIndex)" class="text-gray-300 hover:text-red-500 px-1">
+                                                <i class="fas fa-minus-circle"></i>
+                                            </button>
+                                        </div>
+                                        <div class="text-right">
+                                            <button type="button" @click="addStudentRow(gIndex)" class="text-xs text-blue-500 hover:text-blue-700 font-bold">
+                                                <i class="fas fa-plus mr-1"></i> {{ t('btn_add_student') }}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                         <!-- Add Class Group Button -->
+                        <div class="text-center">
+                            <button type="button" @click="addClassGroup" class="bg-gray-100 text-gray-600 hover:bg-gray-200 px-4 py-2 rounded-lg font-bold text-sm border border-gray-300 shadow-sm transition">
+                                <i class="fas fa-layer-group mr-1"></i> {{ t('btn_add_class') }}
+                            </button>
+                        </div>
+                        
+                         <div class="mt-4 flex items-center justify-end text-xs text-gray-500">
+                            <label class="flex items-center"><input type="checkbox" v-model="keepClassInfo" class="mr-1"> {{ t('chk_keep_class') }}</label>
                         </div>
 
                         <button type="submit" :disabled="isSubmitting" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-6 rounded-xl shadow-lg transform active:scale-95 transition disabled:opacity-60 disabled:cursor-not-allowed">
                             <span v-if="isSubmitting" class="loader inline-block mr-2 w-4 h-4 border-2 border-white border-t-transparent"></span>
-                            {{ isSubmitting ? '提交中...' : '确认报名' }}
+                            {{ isSubmitting ? t('btn_submitting') : t('btn_submit_reg') }}
                         </button>
                     </form>
                 </div>
@@ -398,44 +415,39 @@
             <transition name="fade" mode="out-in">
                 <div v-if="currentTab === 'admin'" key="admin" class="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200 no-print">
                     <div class="bg-gray-800 text-white p-6 flex justify-between items-center">
-                        <h2 class="text-xl font-bold"><i class="fas fa-cogs text-yellow-400 mr-2"></i>项目管理后台</h2>
+                        <h2 class="text-xl font-bold"><i class="fas fa-cogs text-yellow-400 mr-2"></i>{{ t('admin_title') }}</h2>
                         <button @click="goHome"><i class="fas fa-times hover:text-gray-300"></i></button>
                     </div>
                     <div class="p-6">
                         <div class="mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                            <label class="block text-sm font-bold text-gray-700 mb-2">添加新项目 (同步至云端)</label>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">{{ t('label_add_item') }}</label>
                             <div class="flex gap-2">
-                                <input v-model="adminNewItemName" :disabled="isSubmitting" type="text" placeholder="比赛名称" class="flex-grow border border-gray-300 rounded-lg px-4 py-2 outline-none focus:border-green-500">
-                                <input v-model="adminNewItemOrg" :disabled="isSubmitting" @keyup.enter="adminAddItem" type="text" placeholder="主办单位 (选填)" class="w-1/3 border border-gray-300 rounded-lg px-4 py-2 outline-none focus:border-green-500">
+                                <input v-model="adminNewItemName" :disabled="isSubmitting" type="text" :placeholder="t('ph_item_name')" class="flex-grow border border-gray-300 rounded-lg px-4 py-2 outline-none focus:border-green-500">
+                                <input v-model="adminNewItemOrg" :disabled="isSubmitting" @keyup.enter="adminAddItem" type="text" :placeholder="t('ph_organizer')" class="w-1/3 border border-gray-300 rounded-lg px-4 py-2 outline-none focus:border-green-500">
                                 <button @click="adminAddItem" :disabled="isSubmitting" class="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
-                                    <i v-if="isSubmitting" class="fas fa-spinner fa-spin"></i> 添加
+                                    <i v-if="isSubmitting" class="fas fa-spinner fa-spin"></i> {{ t('btn_add') }}
                                 </button>
                             </div>
                         </div>
                         <div>
-                            <h3 class="font-bold text-gray-700 mb-3">云端项目列表 ({{ competitionItems.length }})</h3>
-                            
-                            <!-- 后台加载骨架屏 -->
-                            <div v-if="isInitializing" class="space-y-2 animate-pulse">
-                                <div v-for="n in 3" :key="n" class="h-12 bg-gray-200 rounded-lg"></div>
-                            </div>
-
-                            <div v-else-if="competitionItems.length === 0" class="text-center py-8 text-gray-400 bg-gray-50 rounded-lg border-2 border-dashed">
-                                暂无比赛项目，请在上方输入名称并点击添加
-                            </div>
-
-                            <ul v-else class="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                            <h3 class="font-bold text-gray-700 mb-3">{{ t('label_cloud_list') }} ({{ competitionItems.length }})</h3>
+                            <ul class="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                                 <li v-for="(item, index) in competitionItems" :key="index" class="flex justify-between items-center p-3 bg-white border border-gray-100 rounded-lg shadow-sm hover:shadow-md transition">
                                     <div class="flex items-center">
+                                        <!-- 状态切换按钮 -->
+                                        <button @click="toggleStatus(item)" class="mr-3 text-lg transition-transform active:scale-90 focus:outline-none" :title="item.status === 'closed' ? t('btn_start_comp') : t('btn_end_comp')">
+                                            <i class="fas" :class="item.status === 'closed' ? 'fa-play-circle text-green-500' : 'fa-pause-circle text-gray-400'"></i>
+                                        </button>
+
                                         <i :class="getCategoryIcon(item.name)" class="text-orange-400 mr-3 w-6 text-center"></i>
                                         <div class="flex flex-col">
-                                            <span class="font-bold text-gray-800">{{ item.name }}</span>
-                                            <span v-if="item.organizer" class="text-xs text-gray-400">主办: {{ item.organizer }}</span>
+                                            <span class="font-bold text-gray-800" :class="{'line-through text-gray-400': item.status === 'closed'}">{{ item.name }}</span>
+                                            <span v-if="item.organizer" class="text-xs text-gray-400">{{ t('label_organizer') }}: {{ item.organizer }}</span>
                                         </div>
                                     </div>
                                     <div class="flex gap-2">
-                                        <button @click="openEditCategory(item)" :disabled="isSubmitting" class="text-gray-400 hover:text-blue-500 p-2" title="修改"><i class="fas fa-edit"></i></button>
-                                        <button @click="adminDeleteItem(item.name)" :disabled="isSubmitting" class="text-gray-400 hover:text-red-500 p-2" title="删除"><i class="fas fa-trash-alt"></i></button>
+                                        <button @click="openEditCategory(item)" :disabled="isSubmitting" class="text-gray-400 hover:text-blue-500 p-2"><i class="fas fa-edit"></i></button>
+                                        <button @click="adminDeleteItem(item.name)" :disabled="isSubmitting" class="text-gray-400 hover:text-red-500 p-2"><i class="fas fa-trash-alt"></i></button>
                                     </div>
                                 </li>
                             </ul>
@@ -446,37 +458,35 @@
 
         </main>
 
-        <!-- ★★★ 海报预览 Modal (双栏排版优化) ★★★ -->
+        <!-- 海报预览 Modal -->
         <transition name="modal">
             <div v-if="posterModal.visible" class="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 no-print">
                 <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-full">
                     <div class="bg-gray-800 text-white px-6 py-3 flex justify-between items-center shrink-0">
-                        <h3 class="font-bold text-lg"><i class="fas fa-image mr-2"></i>荣誉榜海报预览</h3>
+                        <h3 class="font-bold text-lg"><i class="fas fa-image mr-2"></i>{{ t('poster_title') }}</h3>
                         <button @click="posterModal.visible = false"><i class="fas fa-times"></i></button>
                     </div>
                     
-                    <!-- 海报渲染区域 -->
                     <div class="overflow-y-auto p-4 flex-grow bg-gray-100 flex justify-center">
                         <div id="poster-container" class="poster-container w-[900px] min-h-[700px] p-8 relative shadow-2xl rounded-sm flex flex-col">
-                            <!-- 装饰元素 -->
                             <div class="absolute top-0 left-0 w-32 h-32 border-t-8 border-l-8 border-yellow-400 rounded-tl-3xl m-6 opacity-60"></div>
                             <div class="absolute bottom-0 right-0 w-32 h-32 border-b-8 border-r-8 border-yellow-400 rounded-br-3xl m-6 opacity-60"></div>
                             
                             <div class="text-center mb-8 relative z-10">
-                                <div class="text-yellow-200 text-xl mb-1 tracking-[0.2em] font-bold">新廊华小</div>
+                                <div class="text-yellow-200 text-xl mb-1 tracking-[0.2em] font-bold">{{ t('school_name') }}</div>
                                 <h1 class="text-5xl font-bold text-white mb-3 text-shadow-lg tracking-wider">{{ selectedCategory }}</h1>
                                 <div class="inline-block bg-gradient-to-r from-yellow-600 to-yellow-400 text-white border-2 border-yellow-200 px-8 py-1 rounded-full font-bold text-2xl shadow-xl mt-2">
-                                    荣耀时刻 · 荣誉榜
+                                    {{ t('poster_subtitle') }}
                                 </div>
                             </div>
 
                             <div class="flex-grow relative z-10 flex gap-10 items-start">
-                                <!-- 左栏：1-3年级 -->
+                                <!-- Left -->
                                 <div class="flex-1 space-y-6">
                                     <div v-for="(group, idx) in posterData.left" :key="'L'+idx">
                                         <div class="flex items-center mb-3">
                                             <div class="h-[2px] bg-yellow-400/50 flex-grow"></div>
-                                            <span class="mx-4 text-yellow-200 font-bold text-xl">{{ group.gradeLabel }}</span>
+                                            <span class="mx-4 text-yellow-200 font-bold text-xl">{{ group.translatedLabel }}</span>
                                             <div class="h-[2px] bg-yellow-400/50 flex-grow"></div>
                                         </div>
                                         <div class="grid grid-cols-1 gap-2">
@@ -486,22 +496,21 @@
                                                     <div class="text-gray-500 text-xs mt-0.5">{{ stu.className }}</div>
                                                 </div>
                                                 <div class="text-right">
-                                                    <span class="inline-block bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold">{{ stu.rank }}</span>
+                                                    <span class="inline-block bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold">{{ t_rank(stu.rank) }}</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                                 
-                                <!-- 分隔线 -->
                                 <div class="w-[2px] bg-yellow-400/30 self-stretch rounded-full"></div>
                                 
-                                <!-- 右栏：4-6年级 -->
+                                <!-- Right -->
                                 <div class="flex-1 space-y-6">
                                     <div v-for="(group, idx) in posterData.right" :key="'R'+idx">
                                         <div class="flex items-center mb-3">
                                             <div class="h-[2px] bg-yellow-400/50 flex-grow"></div>
-                                            <span class="mx-4 text-yellow-200 font-bold text-xl">{{ group.gradeLabel }}</span>
+                                            <span class="mx-4 text-yellow-200 font-bold text-xl">{{ group.translatedLabel }}</span>
                                             <div class="h-[2px] bg-yellow-400/50 flex-grow"></div>
                                         </div>
                                         <div class="grid grid-cols-1 gap-2">
@@ -511,7 +520,7 @@
                                                     <div class="text-gray-500 text-xs mt-0.5">{{ stu.className }}</div>
                                                 </div>
                                                 <div class="text-right">
-                                                    <span class="inline-block bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold">{{ stu.rank }}</span>
+                                                    <span class="inline-block bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold">{{ t_rank(stu.rank) }}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -519,21 +528,20 @@
                                 </div>
                             </div>
 
-                            <!-- 暂无数据提示 -->
                             <div v-if="!posterData.left.length && !posterData.right.length" class="absolute inset-0 flex items-center justify-center text-white/50 text-xl font-bold">
-                                暂无得奖记录
+                                {{ t('msg_no_winners') }}
                             </div>
 
                             <div class="text-center mt-10 text-yellow-200/60 text-xs">
-                                新廊华小校内竞赛系统自动生成 · {{ new Date().toLocaleDateString() }}
+                                {{ t('school_name') }} · {{ new Date().toLocaleDateString() }}
                             </div>
                         </div>
                     </div>
 
                     <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3 shrink-0">
-                        <button @click="posterModal.visible = false" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-bold">关闭</button>
+                        <button @click="posterModal.visible = false" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-bold">{{ t('btn_close') }}</button>
                         <button @click="downloadPoster" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-lg font-bold flex items-center">
-                            <i class="fas fa-download mr-2"></i> 保存为图片
+                            <i class="fas fa-download mr-2"></i> {{ t('btn_save_img') }}
                         </button>
                     </div>
                 </div>
@@ -552,9 +560,10 @@
                         <p class="text-gray-600 mb-4 whitespace-pre-line">{{ modalState.message }}</p>
                         <input v-if="['prompt', 'password'].includes(modalState.type)" :type="modalState.type === 'password' ? 'password' : 'text'" v-model="modalState.inputValue" @keyup.enter="handleModalConfirm" ref="modalInput" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-orange-500" :placeholder="modalState.placeholder">
                     </div>
-                    <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
-                        <button v-if="modalState.type !== 'alert'" @click="handleModalCancel" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold">取消</button>
-                        <button @click="handleModalConfirm" class="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-bold">确定</button>
+                    <!-- 控制按钮显示 -->
+                    <div v-if="modalState.showButtons !== false" class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
+                        <button v-if="modalState.type !== 'alert'" @click="handleModalCancel" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold">{{ t('btn_cancel') }}</button>
+                        <button @click="handleModalConfirm" class="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-bold">{{ modalState.confirmText || t('btn_confirm') }}</button>
                     </div>
                 </div>
             </div>
@@ -565,26 +574,26 @@
             <div v-if="editCategoryModal.visible" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm no-print">
                 <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden transform transition-all">
                     <div class="bg-blue-600 px-6 py-4 flex justify-between items-center text-white">
-                        <h3 class="font-bold text-lg"><i class="fas fa-edit mr-2"></i>修改比赛项目</h3>
+                        <h3 class="font-bold text-lg"><i class="fas fa-edit mr-2"></i>{{ t('modal_edit_title') }}</h3>
                         <button @click="editCategoryModal.visible = false"><i class="fas fa-times"></i></button>
                     </div>
                     <div class="p-6 space-y-4">
                         <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">比赛名称 <span class="text-red-500">*</span></label>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">{{ t('ph_item_name') }} <span class="text-red-500">*</span></label>
                             <input type="text" v-model="editCategoryModal.newName" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
                         <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">主办单位</label>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">{{ t('label_organizer') }}</label>
                             <input type="text" v-model="editCategoryModal.organizer" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="如：教务处">
                         </div>
                         <div class="bg-yellow-50 p-3 rounded text-xs text-yellow-800">
-                            <i class="fas fa-info-circle mr-1"></i> 提示：修改比赛名称会同步更新已有报名记录中的项目名称。
+                            <i class="fas fa-info-circle mr-1"></i> {{ t('hint_edit_sync') }}
                         </div>
                     </div>
                     <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
-                        <button @click="editCategoryModal.visible = false" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold">取消</button>
+                        <button @click="editCategoryModal.visible = false" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold">{{ t('btn_cancel') }}</button>
                         <button @click="submitEditCategory" :disabled="isSubmitting" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold disabled:opacity-50 flex items-center">
-                            <i v-if="isSubmitting" class="fas fa-spinner fa-spin mr-2"></i> 保存修改
+                            <i v-if="isSubmitting" class="fas fa-spinner fa-spin mr-2"></i> {{ t('btn_save') }}
                         </button>
                     </div>
                 </div>
@@ -596,44 +605,37 @@
             <div v-if="scoreModal.visible" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm no-print">
                 <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden transform transition-all">
                     <div class="bg-blue-600 px-6 py-4 flex justify-between items-center text-white">
-                        <h3 class="font-bold text-lg"><i class="fas fa-medal mr-2"></i>成绩录入</h3>
+                        <h3 class="font-bold text-lg"><i class="fas fa-medal mr-2"></i>{{ t('modal_score_title') }}</h3>
                         <button @click="scoreModal.visible = false"><i class="fas fa-times"></i></button>
                     </div>
                     <div class="p-6 space-y-4">
                         <div class="bg-blue-50 p-3 rounded text-sm text-blue-800">
-                            正在为 <strong>{{ scoreModal.className }}</strong> 的 <strong>{{ scoreModal.studentName }}</strong> 录入成绩。
+                            <strong>{{ scoreModal.className }}</strong> - <strong>{{ scoreModal.studentName }}</strong>
                         </div>
                         
                         <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">分数 (可选)</label>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">{{ t('th_score') }}</label>
                             <input type="text" v-model="scoreModal.score" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 95">
                         </div>
 
                         <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">奖项/名次 (可选)</label>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">{{ t('th_rank') }}</label>
                             <select v-model="scoreModal.rank" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                                <option value="">无</option>
-                                <option value="冠军">🏆 冠军</option>
-                                <option value="亚军">🥈 亚军</option>
-                                <option value="季军">🥉 季军</option>
-                                <option value="第四名">4️⃣ 第四名</option>
-                                <option value="第五名">5️⃣ 第五名</option>
-                                <option value="特优奖">🏅 特优奖</option>
-                                <option value="优秀奖">🎖️ 优秀奖</option>
-                                <option value="安慰奖">🎗️ 安慰奖</option>
+                                <option value="">-</option>
+                                <option v-for="r in rankOptions" :key="r" :value="r">{{ t_rank(r) }}</option>
                             </select>
                         </div>
 
                         <!-- 🔒 密码验证 -->
                         <div>
-                            <label class="block text-sm font-bold text-red-600 mb-1">操作密码</label>
-                            <input type="password" v-model="scoreModal.password" class="w-full border-2 border-red-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-red-500 bg-red-50" placeholder="请输入密码以保存">
+                            <label class="block text-sm font-bold text-red-600 mb-1">{{ t('label_password') }}</label>
+                            <input type="password" v-model="scoreModal.password" class="w-full border-2 border-red-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-red-500 bg-red-50" :placeholder="t('ph_password')">
                         </div>
                     </div>
                     <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
-                        <button @click="scoreModal.visible = false" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold">取消</button>
+                        <button @click="scoreModal.visible = false" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold">{{ t('btn_cancel') }}</button>
                         <button @click="submitScore" :disabled="isSubmitting" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold disabled:opacity-50 flex items-center">
-                            <i v-if="isSubmitting" class="fas fa-spinner fa-spin mr-2"></i> 保存
+                            <i v-if="isSubmitting" class="fas fa-spinner fa-spin mr-2"></i> {{ t('btn_confirm') }}
                         </button>
                     </div>
                 </div>
@@ -646,11 +648,288 @@
         const { createApp, ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
 
         // ⚠️ 重要：替换为你最新的 Web App URL
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbygUvrWzIWQc49EFoBKrE_bdP1g-KN1Jba294oC3mEmhgO3glenq4gl4YXmYof-8tDs/exec"; 
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx6o9Gp--zJyS0Vkd0xzqYK4-yh1QXnXAMUCLJg9W5S4CDVw1npUsxNT7OmZ9AVirM8/exec"; 
+
+        const translations = {
+            zh: {
+                school_name: "新廊华小校内竞赛系统",
+                school_header_print: "新廊华小",
+                system_subtitle: "云端实时版",
+                nav_lobby: "大厅",
+                loading_connect: "正在连接 Google Database...",
+                lobby_title: "比赛大厅",
+                status_connecting: "连接中...",
+                status_live: "实时同步",
+                search_placeholder: "搜姓名、班级或项目...",
+                admin_mode_hint: "您处于管理员模式，点击名单旁的铅笔图标可录入成绩。",
+                btn_exit_admin: "退出管理",
+                label_ongoing: "进行中",
+                label_registered: "已报",
+                unit_person: "人",
+                msg_no_competitions: "暂无比赛项目",
+                btn_goto_add: "前往后台添加",
+                btn_back: "返回",
+                label_organizer: "主办",
+                mode_entry: "录入模式",
+                msg_no_records: "暂无报名记录",
+                btn_go_register: "去报名",
+                btn_batch_entry: "批量录入",
+                btn_poster: "生成海报",
+                btn_print_options: "打印选项",
+                print_roster: "参赛点名表",
+                print_score_sheet: "评分记录表",
+                print_winners: "得奖名单",
+                btn_add_reg: "新增报名",
+                status_saving: "正在保存...",
+                hint_batch_mode: "已进入批量录入模式，修改后请点击保存。",
+                btn_cancel: "取消",
+                btn_save_all: "保存全部",
+                btn_save: "保存",
+                total: "共",
+                th_no: "序",
+                th_class: "班级",
+                th_name: "姓名",
+                th_score: "分数",
+                th_rank: "名次",
+                th_note: "备注",
+                reg_title: "报名录入",
+                reg_subtitle: "所有选项均来自 Google Sheets 实时数据",
+                label_item: "参赛项目",
+                ph_select_item: "请点击选择参赛项目...",
+                label_class: "所属班级",
+                ph_select_class: "选择班级",
+                chk_keep_class: "连续报名保留班级",
+                label_students: "选择学生",
+                hint_select_class_first: "请先选择班级",
+                opt_empty: "(空)",
+                btn_clear: "清空",
+                btn_submitting: "提交中...",
+                btn_confirm: "确认",
+                btn_submit_reg: "确认报名",
+                admin_title: "管理员模式",
+                label_add_item: "添加新项目 (同步至云端)",
+                ph_item_name: "比赛名称",
+                ph_organizer: "主办单位 (选填)",
+                btn_add: "添加",
+                label_cloud_list: "云端项目列表",
+                poster_title: "荣誉榜海报预览",
+                poster_subtitle: "荣耀时刻 · 荣誉榜",
+                msg_no_winners: "暂无得奖记录",
+                btn_close: "关闭",
+                btn_save_img: "保存为图片",
+                modal_edit_title: "修改比赛项目",
+                hint_edit_sync: "提示：修改比赛名称会同步更新已有报名记录中的项目名称。",
+                modal_score_title: "成绩录入",
+                label_password: "操作密码",
+                ph_password: "请输入密码",
+                status_ended: "已结束",
+                btn_end_comp: "结束比赛",
+                btn_start_comp: "恢复比赛",
+                toast_success: "操作成功",
+                toast_fail: "操作失败",
+                label_signature: "签名",
+                label_date: "日期",
+                btn_add_student: "添加学生",
+                btn_add_class: "增加班级",
+                btn_remove_class: "移除班级",
+                btn_login: "登入",
+                grade_1: "一年级", grade_2: "二年级", grade_3: "三年级", grade_4: "四年级", grade_5: "五年级", grade_6: "六年级",
+                rank_champ: "冠军", rank_runnerup: "亚军", rank_3rd: "季军", rank_4th: "第四名", rank_5th: "第五名",
+                rank_distinction: "特优奖", rank_excellence: "优秀奖", rank_consolation: "安慰奖"
+            },
+            ms: {
+                school_name: "Sistem Pertandingan SJK(C) Ladang Grisek",
+                school_header_print: "SJK(C) Ladang Grisek",
+                system_subtitle: "Versi Awan Masa Nyata",
+                nav_lobby: "Lobi",
+                loading_connect: "Menyambung ke Pangkalan Data Google...",
+                lobby_title: "Lobi Pertandingan",
+                status_connecting: "Menyambung...",
+                status_live: "Segerak",
+                search_placeholder: "Cari nama, kelas atau acara...",
+                admin_mode_hint: "Mod Admin aktif. Klik ikon pensel untuk masukkan markah.",
+                btn_exit_admin: "Keluar Admin",
+                label_ongoing: "Sedang Berjalan",
+                label_registered: "Daftar",
+                unit_person: "orang",
+                msg_no_competitions: "Tiada acara pertandingan",
+                btn_goto_add: "Pergi Tambah",
+                btn_back: "Kembali",
+                label_organizer: "Penganjur",
+                mode_entry: "Mod Input",
+                msg_no_records: "Tiada rekod pendaftaran",
+                btn_go_register: "Daftar Sekarang",
+                btn_batch_entry: "Input Berkelompok",
+                btn_poster: "Jana Poster",
+                btn_print_options: "Pilihan Cetak",
+                print_roster: "Senarai Kosong",
+                print_score_sheet: "Borang Markah",
+                print_winners: "Senarai Pemenang",
+                btn_add_reg: "Tambah Daftar",
+                status_saving: "Sedang Simpan...",
+                hint_batch_mode: "Mod input berkelompok aktif. Sila simpan selepas ubah.",
+                btn_cancel: "Batal",
+                btn_save_all: "Simpan Semua",
+                btn_save: "Simpan",
+                total: "Jum",
+                th_no: "No.",
+                th_class: "Kelas",
+                th_name: "Nama",
+                th_score: "Markah",
+                th_rank: "Kedudukan",
+                th_note: "Catatan",
+                reg_title: "Input Pendaftaran",
+                reg_subtitle: "Pilihan dari Google Sheets masa nyata",
+                label_item: "Acara Pertandingan",
+                ph_select_item: "Sila pilih acara...",
+                label_class: "Kelas",
+                ph_select_class: "Pilih Kelas",
+                chk_keep_class: "Kekalkan kelas dipilih",
+                label_students: "Pilih Murid",
+                hint_select_class_first: "Sila pilih kelas dahulu",
+                opt_empty: "(Kosong)",
+                btn_clear: "Kosongkan",
+                btn_submitting: "Menghantar...",
+                btn_confirm: "Sahkan",
+                btn_submit_reg: "Sahkan Pendaftaran",
+                admin_title: "Mod Pentadbir",
+                label_add_item: "Tambah Acara Baru (Segerak Awan)",
+                ph_item_name: "Nama Pertandingan",
+                ph_organizer: "Penganjur (Pilihan)",
+                btn_add: "Tambah",
+                label_cloud_list: "Senarai Acara Awan",
+                poster_title: "Pratonton Papan Kehormatan",
+                poster_subtitle: "Saat Kegemilangan · Papan Kehormatan",
+                msg_no_winners: "Tiada rekod pemenang",
+                btn_close: "Tutup",
+                btn_save_img: "Simpan Imej",
+                modal_edit_title: "Ubah Acara",
+                hint_edit_sync: "Petua: Mengubah nama akan mengemas kini rekod sedia ada.",
+                modal_score_title: "Input Markah",
+                label_password: "Kata Laluan Operasi",
+                ph_password: "Masukkan kata laluan",
+                status_ended: "Tamat",
+                btn_end_comp: "Tamatkan Acara",
+                btn_start_comp: "Sambung Semula",
+                toast_success: "Berjaya",
+                toast_fail: "Gagal",
+                label_signature: "Tandatangan",
+                label_date: "Tarikh",
+                btn_add_student: "Tambah Murid",
+                btn_add_class: "Tambah Kelas",
+                btn_remove_class: "Hapus Kelas",
+                btn_login: "Log Masuk",
+                grade_1: "Tahun 1", grade_2: "Tahun 2", grade_3: "Tahun 3", grade_4: "Tahun 4", grade_5: "Tahun 5", grade_6: "Tahun 6",
+                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Ketiga", rank_4th: "Keempat", rank_5th: "Kelima",
+                rank_distinction: "Cemerlang", rank_excellence: "Kepujian", rank_consolation: "Saguhati"
+            },
+            en: {
+                school_name: "SJK(C) Ladang Grisek Competition System",
+                school_header_print: "SJK(C) Ladang Grisek",
+                system_subtitle: "Cloud Real-time Version",
+                nav_lobby: "Lobby",
+                loading_connect: "Connecting to Google Database...",
+                lobby_title: "Competition Lobby",
+                status_connecting: "Connecting...",
+                status_live: "Live Sync",
+                search_placeholder: "Search name, class or item...",
+                admin_mode_hint: "Admin mode active. Click pencil icon to enter scores.",
+                btn_exit_admin: "Exit Admin",
+                label_ongoing: "Ongoing",
+                label_registered: "Registered",
+                unit_person: "pax",
+                msg_no_competitions: "No competitions found",
+                btn_goto_add: "Go Add",
+                btn_back: "Back",
+                label_organizer: "Organizer",
+                mode_entry: "Entry Mode",
+                msg_no_records: "No registration records",
+                btn_go_register: "Register Now",
+                btn_batch_entry: "Batch Entry",
+                btn_poster: "Generate Poster",
+                btn_print_options: "Print Options",
+                print_roster: "Blank Roster",
+                print_score_sheet: "Scoring Sheet",
+                print_winners: "Winners List",
+                btn_add_reg: "Add Registration",
+                status_saving: "Saving...",
+                hint_batch_mode: "Batch entry mode active. Please save changes.",
+                btn_cancel: "Cancel",
+                btn_save_all: "Save All",
+                btn_save: "Save",
+                total: "Total",
+                th_no: "No.",
+                th_class: "Class",
+                th_name: "Name",
+                th_score: "Score",
+                th_rank: "Rank",
+                th_note: "Note",
+                reg_title: "Registration Entry",
+                reg_subtitle: "Options from real-time Google Sheets",
+                label_item: "Competition Item",
+                ph_select_item: "Please select item...",
+                label_class: "Class",
+                ph_select_class: "Select Class",
+                chk_keep_class: "Keep class selected",
+                label_students: "Select Students",
+                hint_select_class_first: "Please select class first",
+                opt_empty: "(Empty)",
+                btn_clear: "Clear",
+                btn_submitting: "Submitting...",
+                btn_confirm: "Confirm",
+                btn_submit_reg: "Confirm Registration",
+                admin_title: "Admin Mode",
+                label_add_item: "Add New Item (Cloud Sync)",
+                ph_item_name: "Competition Name",
+                ph_organizer: "Organizer (Optional)",
+                btn_add: "Add",
+                label_cloud_list: "Cloud Item List",
+                poster_title: "Honor Roll Preview",
+                poster_subtitle: "Glory Moment · Honor Roll",
+                msg_no_winners: "No winners record",
+                btn_close: "Close",
+                btn_save_img: "Save Image",
+                modal_edit_title: "Edit Item",
+                hint_edit_sync: "Tip: Renaming will sync update existing records.",
+                modal_score_title: "Score Entry",
+                label_password: "Operation Password",
+                ph_password: "Enter password",
+                status_ended: "Ended",
+                btn_end_comp: "End Competition",
+                btn_start_comp: "Resume Competition",
+                toast_success: "Success",
+                toast_fail: "Failed",
+                label_signature: "Signature",
+                label_date: "Date",
+                btn_add_student: "Add Student",
+                btn_add_class: "Add Class",
+                btn_remove_class: "Remove Class",
+                btn_login: "Login",
+                grade_1: "Year 1", grade_2: "Year 2", grade_3: "Year 3", grade_4: "Year 4", grade_5: "Year 5", grade_6: "Year 6",
+                rank_champ: "Champion", rank_runnerup: "Runner-up", rank_3rd: "3rd Place", rank_4th: "4th Place", rank_5th: "5th Place",
+                rank_distinction: "Distinction", rank_excellence: "Excellence", rank_consolation: "Consolation"
+            }
+        };
+
+        const rankOptions = ['冠军', '亚军', '季军', '第四名', '第五名', '特优奖', '优秀奖', '安慰奖'];
 
         createApp({
             setup() {
-                // State
+                const lang = ref(localStorage.getItem('app_lang') || 'zh');
+                const t = (key) => translations[lang.value][key] || key;
+                const setLang = (l) => { lang.value = l; localStorage.setItem('app_lang', l); };
+                const currentLangLabel = computed(() => ({'zh':'中文', 'ms':'BM', 'en':'EN'}[lang.value]));
+
+                const t_rank = (dbValue) => {
+                    if (!dbValue) return '';
+                    const map = {
+                        '冠军': 'rank_champ', '亚军': 'rank_runnerup', '季军': 'rank_3rd',
+                        '第四名': 'rank_4th', '第五名': 'rank_5th',
+                        '特优奖': 'rank_distinction', '优秀奖': 'rank_excellence', '安慰奖': 'rank_consolation'
+                    };
+                    return map[dbValue] ? t(map[dbValue]) : dbValue;
+                };
+
                 const currentTab = ref('results');
                 const selectedCategory = ref(null);
                 const isInitializing = ref(true);
@@ -661,42 +940,56 @@
                 
                 const initStatus = ref({ items: false, students: false, results: false });
                 
-                // Data from Cloud
                 const competitionItems = ref([]);
                 const studentDB = ref({});
                 const classList = ref([]);
                 const dbResults = ref([]);
                 const batchEditData = ref([]); 
                 
-                // Forms
-                const form = ref({ stuClass: '', category: '', selectedStudents: ['', '', ''] });
+                const form = ref({ 
+                    category: '', 
+                    groups: [{ id: Date.now(), class: '', students: [''] }] 
+                });
+                
                 const keepClassInfo = ref(true);
                 const adminNewItemName = ref('');
                 const adminNewItemOrg = ref('');
                 const searchQuery = ref('');
 
-                // 👨‍🎓 优化：跨班级清空选人保护
-                watch(() => form.value.stuClass, (newVal, oldVal) => {
-                    if (newVal !== oldVal) {
-                        form.value.selectedStudents = ['', '', ''];
-                    }
-                });
+                const getStudentsByClass = (className) => {
+                    return studentDB.value[className] || [];
+                };
 
-                // Modals & Toasts
-                const modalState = ref({ visible: false, type: 'alert', title: '', message: '', inputValue: '', placeholder: '', icon: '', resolve: null });
+                const addClassGroup = () => {
+                    form.value.groups.push({ id: Date.now(), class: '', students: [''] });
+                };
+
+                const removeClassGroup = (index) => {
+                    form.value.groups.splice(index, 1);
+                };
+
+                const addStudentRow = (groupIndex) => {
+                    form.value.groups[groupIndex].students.push('');
+                };
+
+                const removeStudentRow = (groupIndex, studentIndex) => {
+                    form.value.groups[groupIndex].students.splice(studentIndex, 1);
+                };
+
+                // Add showButtons to modalState
+                const modalState = ref({ visible: false, type: 'alert', title: '', message: '', inputValue: '', placeholder: '', icon: '', resolve: null, confirmText: null, showButtons: true, autoClose: null });
                 const modalInput = ref(null);
                 const toastState = ref({ visible: false, message: '', type: 'success' });
                 
                 const scoreModal = ref({ visible: false, studentName: '', className: '', score: '', rank: '', category: '', password: '' });
                 const editCategoryModal = ref({ visible: false, oldName: '', newName: '', organizer: '' });
-                // 海报数据：left 存放1-3年级，right 存放4-6年级
                 const posterModal = ref({ visible: false });
                 const posterData = ref({ left: [], right: [] }); 
 
                 let autoRefreshTimer = null;
                 let toastTimer = null;
+                let modalAutoCloseTimer = null;
 
-                // --- 📱 PWA 化配置注册 ---
                 const initPWA = () => {
                     const manifest = {
                         name: "新廊华小校内竞赛系统",
@@ -705,16 +998,12 @@
                         display: "standalone",
                         background_color: "#fffbeb",
                         theme_color: "#f97316",
-                        icons: [{
-                            src: "https://api.iconify.design/fxemoji/trophy.png",
-                            sizes: "512x512",
-                            type: "image/png",
-                            purpose: "any maskable"
-                        }]
+                        icons: [{ src: "https://api.iconify.design/fxemoji/trophy.png", sizes: "512x512", type: "image/png" }]
                     };
-                    const manifestStr = JSON.stringify(manifest);
-                    const manifestDataUrl = `data:application/manifest+json;charset=utf-8,${encodeURIComponent(manifestStr)}`;
-                    document.head.insertAdjacentHTML('beforeend', `<link rel="manifest" href="${manifestDataUrl}">`);
+                    const link = document.createElement('link');
+                    link.rel = 'manifest';
+                    link.href = `data:application/manifest+json;charset=utf-8,${encodeURIComponent(JSON.stringify(manifest))}`;
+                    document.head.appendChild(link);
                 };
 
                 const showToast = (message, type = 'success') => {
@@ -726,7 +1015,7 @@
                 const fetchAPI = async (action, payload = null) => {
                     if (GOOGLE_SCRIPT_URL.includes("在此处粘贴")) throw new Error("API URL 未配置");
                     try {
-                        if (payload) { // POST
+                        if (payload) { 
                             const response = await fetch(GOOGLE_SCRIPT_URL, {
                                 method: 'POST',
                                 mode: 'no-cors', 
@@ -734,7 +1023,7 @@
                                 body: JSON.stringify({ action, ...payload })
                             });
                             return response; 
-                        } else { // GET
+                        } else { 
                             const timestamp = new Date().getTime();
                             const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=${action}&_t=${timestamp}`, {
                                 method: 'GET',
@@ -746,7 +1035,7 @@
                     } catch (error) {
                         console.error("API Error:", error);
                         if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
-                            throw new Error("跨域请求被拒绝 (CORS)。\n\n请检查 Apps Script 权限：\n「执行身份」为「我」；「谁可以访问」为「任何人」");
+                            throw new Error("跨域请求被拒绝。请检查 Apps Script 权限。");
                         }
                         throw error;
                     }
@@ -758,11 +1047,11 @@
                         const newItem = {};
                         Object.keys(item).forEach(key => {
                             const k = key.toLowerCase().replace(/\s+/g, '');
-                            if (['studentname', 'name', '姓名', '学生姓名', '学生'].includes(k)) newItem.studentName = item[key];
-                            else if (['studentclass', 'class', '班级'].includes(k)) newItem.studentClass = item[key];
-                            else if (['category', 'competition', '项目', '比赛项目', '比赛'].includes(k)) newItem.category = item[key];
-                            else if (['score', '分数', '成绩'].includes(k)) newItem.score = item[key];
-                            else if (['rank', 'ranking', '名次', '奖项', '排名'].includes(k)) newItem.rank = item[key];
+                            if (['studentname', 'name', '姓名'].some(x => k.includes(x))) newItem.studentName = item[key];
+                            else if (['studentclass', 'class', '班级'].some(x => k.includes(x))) newItem.studentClass = item[key];
+                            else if (['category', 'competition'].some(x => k.includes(x))) newItem.category = item[key];
+                            else if (['score', '分数'].some(x => k.includes(x))) newItem.score = item[key];
+                            else if (['rank', '排名', '名次'].some(x => k.includes(x))) newItem.rank = item[key];
                             else newItem[key] = item[key];
                         });
                         if(!newItem.studentName) newItem.studentName = newItem.Name || '';
@@ -778,7 +1067,7 @@
                     try {
                         const items = await fetchAPI('getCompetitions');
                         const normalizedItems = Array.isArray(items) 
-                            ? items.map(i => typeof i === 'string' ? {name: i, organizer: ''} : i)
+                            ? items.map(i => typeof i === 'string' ? {name: i, organizer: '', status: 'open'} : i)
                             : [];
                         competitionItems.value = normalizedItems;
                         initStatus.value.items = true;
@@ -804,7 +1093,7 @@
                     } catch (e) {
                         console.error(e);
                         if (!isBackground && e.message !== "API URL 未配置") {
-                           await showDialog({ type: 'alert', title: '数据库连接失败', message: e.message, icon: 'fas fa-exclamation-triangle' });
+                           await showDialog({ type: 'alert', title: 'Error', message: e.message });
                         }
                     } finally {
                         isInitializing.value = false;
@@ -821,7 +1110,7 @@
                             const uniqueMap = new Map();
                             parsed.forEach(item => {
                                 if (typeof item === 'string') {
-                                    if (!uniqueMap.has(item)) uniqueMap.set(item, { name: item, organizer: '' });
+                                    if (!uniqueMap.has(item)) uniqueMap.set(item, { name: item, organizer: '', status: 'open' });
                                 } else if (item && item.name) {
                                     if (!uniqueMap.has(item.name)) uniqueMap.set(item.name, item);
                                 }
@@ -847,105 +1136,143 @@
                 watch(competitionItems, (newVal) => { localStorage.setItem('school_competition_items', JSON.stringify(newVal)); }, { deep: true });
                 onUnmounted(() => { if (autoRefreshTimer) clearInterval(autoRefreshTimer); });
 
-                // --- 业务逻辑 ---
                 const adminAddItem = async () => {
                     const name = adminNewItemName.value.trim();
                     const organizer = adminNewItemOrg.value.trim();
-                    if (!name) return showDialog({ title: '提示', message: '比赛名称不能为空' });
+                    if (!name) return showDialog({ title: 'Info', message: 'Name empty' });
                     isSubmitting.value = true;
                     try {
                         await fetchAPI('addCompetition', { name, organizer });
                         adminNewItemName.value = '';
                         adminNewItemOrg.value = '';
                         await fetchAllData(); 
-                        showToast('项目添加成功');
+                        showToast(t('toast_success'));
                     } catch(e) { console.error(e); }
                     isSubmitting.value = false;
                 };
 
                 const adminDeleteItem = async (name) => {
-                    if (!(await showDialog({ type: 'confirm', title: '删除确认', message: `确定要从云端永久删除“${name}”吗？`, icon: 'fas fa-trash' }))) return;
+                    if (!(await showDialog({ type: 'confirm', title: 'Confirm', message: `Delete ${name}?`, icon: 'fas fa-trash' }))) return;
                     isSubmitting.value = true;
                     try {
                         await fetchAPI('deleteCompetition', { name });
                         await fetchAllData();
-                        showToast('项目已删除');
+                        showToast(t('toast_success'));
                     } catch(e) { console.error(e); }
                     isSubmitting.value = false;
                 };
 
+                const toggleStatus = async (item) => {
+                    isSubmitting.value = true;
+                    try {
+                        await fetchAPI('toggleStatus', { name: item.name });
+                        item.status = (item.status === 'closed') ? 'open' : 'closed';
+                        showToast(t('toast_success'));
+                    } catch(e) { console.error(e); }
+                    finally { isSubmitting.value = false; }
+                };
+
                 const openEditCategory = (item) => {
-                    editCategoryModal.value = {
-                        visible: true,
-                        oldName: item.name,
-                        newName: item.name,
-                        organizer: item.organizer || ''
-                    };
+                    editCategoryModal.value = { visible: true, oldName: item.name, newName: item.name, organizer: item.organizer || '' };
                 };
 
                 const submitEditCategory = async () => {
                     const { oldName, newName, organizer } = editCategoryModal.value;
-                    if (!newName.trim()) return showDialog({ title: '提示', message: '比赛名称不能为空' });
+                    if (!newName.trim()) return showDialog({ title: 'Info', message: 'Name empty' });
                     isSubmitting.value = true;
                     try {
                         await fetchAPI('editCompetition', { oldName, newName: newName.trim(), organizer: organizer.trim() });
                         editCategoryModal.value.visible = false;
                         if (selectedCategory.value === oldName) selectedCategory.value = newName.trim();
                         await fetchAllData();
-                        showToast('比赛信息修改成功');
-                    } catch(e) {
-                        console.error(e);
-                        await showDialog({ type: 'alert', title: '失败', message: '修改失败，请重试', icon: 'fas fa-times' });
-                    } finally { isSubmitting.value = false; }
+                        showToast(t('toast_success'));
+                    } catch(e) { console.error(e); } finally { isSubmitting.value = false; }
                 };
 
+                const getCategoryStatus = (name) => {
+                    const item = competitionItems.value.find(i => i.name === name);
+                    return item ? item.status : 'open';
+                };
+
+                const activeCompetitions = computed(() => competitionItems.value.filter(i => i.status !== 'closed'));
+
                 const submitForm = async () => {
-                    let validStudents = [...new Set(form.value.selectedStudents.filter(s => s))];
-                    if (validStudents.length === 0) return showDialog({ title: '提示', message: '请至少选择一名学生' });
-                    
+                    let allEntries = [];
+                    form.value.groups.forEach(group => {
+                        if (!group.class) return;
+                        group.students.forEach(stuName => {
+                            if (stuName && stuName.trim()) {
+                                allEntries.push({
+                                    studentName: stuName,
+                                    studentClass: group.class,
+                                    category: form.value.category
+                                });
+                            }
+                        });
+                    });
+
+                    const uniqueEntries = [];
+                    const seen = new Set();
+                    allEntries.forEach(entry => {
+                        const key = `${entry.studentClass}-${entry.studentName}`;
+                        if (!seen.has(key)) {
+                            seen.add(key);
+                            uniqueEntries.push(entry);
+                        }
+                    });
+
+                    if (uniqueEntries.length === 0) return showDialog({ title: 'Info', message: 'No valid students selected' });
+
                     const currentCatStudents = dbResults.value.filter(s => s.category === form.value.category);
                     const duplicates = [];
-                    validStudents = validStudents.filter(stuName => {
-                        const isDup = currentCatStudents.some(s => s.studentName === stuName && s.studentClass === form.value.stuClass);
-                        if (isDup) duplicates.push(stuName);
+                    const finalEntries = uniqueEntries.filter(entry => {
+                        const isDup = currentCatStudents.some(s => s.studentName === entry.studentName && s.studentClass === entry.studentClass);
+                        if (isDup) duplicates.push(`${entry.studentName}(${entry.studentClass})`);
                         return !isDup;
                     });
 
                     if (duplicates.length > 0) {
-                        await showDialog({ type: 'alert', title: '防重复拦截', message: `以下学生已报名【${form.value.category}】，将被自动忽略：\n\n${duplicates.join('、')}`, icon: 'fas fa-shield-alt' });
+                         await showDialog({ type: 'alert', title: 'Duplicate', message: `Already reg: ${duplicates.join(', ')}` });
                     }
-                    if (validStudents.length === 0) return;
+                    if (finalEntries.length === 0) return;
 
                     isSubmitting.value = true;
                     let successCount = 0;
-                    for (const stuName of validStudents) {
+                    for (const entry of finalEntries) {
                         try {
-                            await fetchAPI('register', { name: stuName, stuClass: form.value.stuClass, category: form.value.category });
+                            await fetchAPI('register', { name: entry.studentName, stuClass: entry.studentClass, category: entry.category });
                             successCount++;
                         } catch(e) { console.error(e); }
                     }
-                    showToast(`成功新增报名 ${successCount} 人`);
+                    showToast(`${t('toast_success')} ${successCount}`);
                     
-                    if (keepClassInfo.value) form.value.selectedStudents = ['', '', ''];
-                    else form.value = { stuClass: '', category: '', selectedStudents: ['', '', ''] };
+                    if (keepClassInfo.value) {
+                         form.value.groups.forEach(g => g.students = ['']);
+                    } else {
+                        form.value.category = '';
+                        form.value.groups = [{ id: Date.now(), class: '', students: [''] }];
+                    }
                     isSubmitting.value = false;
                     fetchAllData(); 
                 };
 
                 const deleteRegistration = async (stu, className) => {
-                    if (!await showDialog({ type: 'confirm', title: '删除确认', message: `确定要取消【${className} ${stu.studentName}】的参赛资格吗？`, icon: 'fas fa-exclamation-triangle' })) return;
+                    if (!await showDialog({ type: 'confirm', title: 'Confirm', message: `Delete ${stu.studentName}?` })) return;
                     isSubmitting.value = true;
                     try {
                         await fetchAPI('deleteRegistration', { name: stu.studentName, stuClass: className, category: selectedCategory.value });
-                        showToast(`已删除 ${stu.studentName} 的报名信息`);
+                        showToast(t('toast_success'));
                         fetchAllData();
-                    } catch (e) { await showDialog({ type: 'alert', title: '删除失败', message: e.message }); }
-                    finally { isSubmitting.value = false; }
+                    } catch (e) { console.error(e); } finally { isSubmitting.value = false; }
                 };
 
                 const startBatchEdit = async () => {
-                    const pwd = await showDialog({ type: 'password', title: '管理员验证', message: '请输入操作密码:', placeholder: '请输入密码', icon: 'fas fa-lock' });
-                    if (pwd !== '888888') { if (pwd !== false) await showDialog({ title: '错误', message: '密码错误' }); return; }
+                    const pwd = await showDialog({ type: 'password', title: 'Admin', message: 'Password:', placeholder: '***', icon: 'fas fa-lock' });
+                    if (pwd !== '888888') { if (pwd !== false) await showDialog({ title: 'Error', message: 'Wrong password' }); return; }
+                    
+                    // Show success modal then proceed
+                    await showDialog({ title: t('toast_success'), message: 'Login successful', showButtons: false, autoClose: 1500, icon: 'fas fa-check-circle' });
+                    
                     batchEditData.value = JSON.parse(JSON.stringify(getSelectedGroupedByGrade()));
                     isBatchEditing.value = true;
                 };
@@ -969,136 +1296,147 @@
                         });
                     });
 
-                    if (updates.length === 0) {
-                        isSubmitting.value = false; isBatchEditing.value = false;
-                        showToast('未检测到任何修改');
-                        return;
-                    }
+                    if (updates.length === 0) { isSubmitting.value = false; isBatchEditing.value = false; return; }
 
                     try {
                         for (let i = 0; i < updates.length; i++) { await fetchAPI('updateScore', updates[i]); changeCount++; }
-                        showToast(`已成功保存 ${changeCount} 条成绩`);
+                        showToast(`${t('toast_success')} ${changeCount}`);
                         isBatchEditing.value = false;
                         fetchAllData(); 
-                    } catch (e) {
-                        console.error(e);
-                        await showDialog({ title: '部分失败', message: '网络传输中断，请刷新后检查数据完整性。', icon: 'fas fa-exclamation-triangle' });
-                    } finally { isSubmitting.value = false; }
+                    } catch (e) { console.error(e); } finally { isSubmitting.value = false; }
                 };
 
                 const openScoreModal = (stu, className) => { scoreModal.value = { visible: true, studentName: stu.studentName, className: className, score: stu.score || '', rank: stu.rank || '', category: selectedCategory.value, password: '' }; };
 
                 const submitScore = async () => {
-                    if (scoreModal.value.password !== '888888') { await showDialog({ type: 'alert', title: '密码错误', message: '操作密码不正确。', icon: 'fas fa-lock' }); return; }
+                    if (scoreModal.value.password !== '888888') { await showDialog({ type: 'alert', title: 'Error', message: 'Wrong password' }); return; }
                     isSubmitting.value = true;
                     try {
                         await fetchAPI('updateScore', { name: scoreModal.value.studentName, stuClass: scoreModal.value.className, category: scoreModal.value.category, score: scoreModal.value.score, rank: scoreModal.value.rank });
                         scoreModal.value.visible = false;
                         const target = dbResults.value.find(s => s.studentName === scoreModal.value.studentName && s.studentClass === scoreModal.value.className && s.category === scoreModal.value.category);
                         if (target) { target.score = scoreModal.value.score; target.rank = scoreModal.value.rank; }
-                        showToast('单条成绩已保存');
-                    } catch(e) { await showDialog({ type: 'alert', title: '失败', message: '保存失败', icon: 'fas fa-times' }); } 
-                    finally { isSubmitting.value = false; }
+                        showToast(t('toast_success'));
+                    } catch(e) { console.error(e); } finally { isSubmitting.value = false; }
                 };
 
-                // --- 🖨️ 三合一报表生成 ---
                 const generatePrintHtml = (title, tableContent) => {
                     const categoryName = selectedCategory.value;
-                    const date = new Date().toLocaleDateString();
+                    const date = new Date().toLocaleDateString('en-GB'); 
                     const groupInfo = groupedResults.value.find(g => g.categoryName === categoryName);
-                    const orgText = groupInfo && groupInfo.organizer ? `<div style="margin-bottom:5px;">主办单位: ${groupInfo.organizer}</div>` : '';
+                    const orgText = groupInfo && groupInfo.organizer ? `<div style="margin-bottom:5px;">${t('label_organizer')}: ${groupInfo.organizer}</div>` : '';
+                    const schoolHeader = `${t('school_header_print')} ${new Date().getFullYear()}${lang.value === 'zh' ? '年' : ''}`;
+
                     return `<html><head><title>${categoryName} - ${title}</title>
                             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.1.0/style.css" />
                             <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai&display=swap" rel="stylesheet">
                             <style>
                                 * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
                                 body { font-family: "LXGW WenKai Screen", "LXGW WenKai", KaiTi, "楷体", STKaiti, "华文楷体", serif; padding: 20px; width: 100%; margin: 0; }
+                                .header-top { text-align: center; font-size: 18px; margin-bottom: 2px; }
                                 h1 { text-align: center; margin-bottom: 5px; font-size: 24px; font-weight: bold; }
                                 .subtitle { text-align: center; font-size: 14px; margin-bottom: 10px; color: #555; }
-                                /* 修复：表格宽度设为 99.5% 防止右边框被裁剪，border-color 加深为纯黑 */
                                 table { width: 99.5%; margin: 0 auto; border-collapse: collapse; font-size: 13px; break-inside: auto; }
                                 th, td { border: 1px solid #000; padding: 2px 2px; text-align: center; line-height: 1.2; }
                                 th { background-color: #f0f0f0; font-weight: bold; padding: 4px 2px; }
                                 tr { break-inside: avoid; break-after: auto; }
                                 .grade-header { background-color: #e0e0e0; font-weight: bold; text-align: left; padding-left: 10px; font-size: 14px; padding-top: 3px; padding-bottom: 3px; }
                                 .signature { margin-top: 30px; display: flex; justify-content: space-between; padding: 0 40px; font-size: 14px; page-break-inside: avoid; }
+                                .generated-date { position: fixed; bottom: 10px; left: 10px; font-size: 12px; color: #555; }
+                                
+                                /* Screen-only controls for PWA */
+                                .screen-controls {
+                                    position: fixed; top: 0; left: 0; right: 0;
+                                    background: rgba(255, 255, 255, 0.95);
+                                    padding: 10px;
+                                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                                    display: flex; justify-content: space-between; align-items: center;
+                                    z-index: 9999;
+                                }
+                                .btn { padding: 6px 16px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+                                .btn-close { background: #f3f4f6; color: #333; }
+                                .btn-print { background: #f97316; color: white; }
+                                .spacer { height: 60px; }
+
                                 @page { size: A4; margin: 10mm; }
-                                @media print { body { width: 100%; } }
+                                @media print { 
+                                    body { width: 100%; } 
+                                    .generated-date { position: fixed; bottom: 0; } 
+                                    .screen-controls, .spacer { display: none; }
+                                }
                             </style>
                         </head><body>
-                            <h1>${categoryName} - ${title}</h1><div class="subtitle">${orgText}<div>生成日期: ${date}</div></div>
+                            <div class="screen-controls">
+                                <button class="btn btn-close" onclick="window.close()">✖ ${t('btn_close')}</button>
+                                <button class="btn btn-print" onclick="window.print()">🖨️ ${t('btn_print_options')}</button>
+                            </div>
+                            <div class="spacer"></div>
+                            
+                            <div class="header-top">${schoolHeader}</div>
+                            <h1>${categoryName} - ${title}</h1><div class="subtitle">${orgText}</div>
                             ${tableContent}
-                            <div class="signature"><div>裁判/负责人签名: ________________</div><div>日期: ________________</div></div>
-                            <script>window.onload = () => { window.print(); };${'</'}script></body></html>`;
+                            ${!title.includes(t('print_winners')) ? `<div class="signature"><div>${t('label_signature')}: ________________</div><div>${t('label_date')}: ________________</div></div>` : ''}
+                            <div class="generated-date">Generated: ${date}</div>
+                            <script>window.onload = () => { setTimeout(() => window.print(), 500); };${'</'}script></body></html>`;
                 };
 
                 const printRoster = () => {
-                    let tableContent = `<table><thead><tr><th style="width:10%">序</th><th style="width:25%">班级</th><th style="width:35%">姓名</th><th style="width:30%">备注</th></tr></thead><tbody>`;
+                    let tableContent = `<table><thead><tr><th style="width:5%">${t('th_no')}</th><th style="width:60%">${t('th_name')}</th><th style="width:10%">${t('th_class')}</th><th style="width:25%">${t('th_note')}</th></tr></thead><tbody>`;
                     getSelectedGroupedByGrade().forEach(group => {
-                        tableContent += `<tr><td colspan="4" class="grade-header">${group.gradeLabel} (${group.totalStudents}人)</td></tr>`;
+                        const unit = lang.value === 'zh' ? '人' : (lang.value === 'ms' ? ' orang' : ' pax');
+                        tableContent += `<tr><td colspan="4" class="grade-header">${group.translatedLabel} (${t('total')} ${group.totalStudents}${unit})</td></tr>`;
                         let index = 1;
-                        group.classes.forEach(cls => { cls.students.forEach(stu => { tableContent += `<tr><td>${index++}</td><td>${cls.className}</td><td>${stu.studentName}</td><td></td></tr>`; }); });
+                        group.classes.forEach(cls => { cls.students.forEach(stu => { tableContent += `<tr><td>${index++}</td><td style="text-align:left;padding-left:10px">${stu.studentName}</td><td>${cls.className}</td><td></td></tr>`; }); });
                     });
                     tableContent += `</tbody></table>`;
-                    const win = window.open('', '_blank'); win.document.write(generatePrintHtml('参赛点名表', tableContent)); win.document.close();
+                    const win = window.open('', '_blank'); win.document.write(generatePrintHtml(t('print_roster'), tableContent)); win.document.close();
                 };
 
                 const printScoringSheet = () => {
-                    let tableContent = `<table><thead><tr><th style="width:8%">序</th><th style="width:15%">班级</th><th style="width:27%">姓名</th><th style="width:15%">分数</th><th style="width:15%">名次</th><th style="width:20%">备注</th></tr></thead><tbody>`;
+                    let tableContent = `<table><thead><tr><th style="width:5%">${t('th_no')}</th><th style="width:45%">${t('th_name')}</th><th style="width:10%">${t('th_class')}</th><th style="width:15%">${t('th_score')}</th><th style="width:15%">${t('th_rank')}</th><th style="width:10%">${t('th_note')}</th></tr></thead><tbody>`;
                     getSelectedGroupedByGrade().forEach(group => {
-                        tableContent += `<tr><td colspan="6" class="grade-header">${group.gradeLabel} (${group.totalStudents}人)</td></tr>`;
+                        const unit = lang.value === 'zh' ? '人' : (lang.value === 'ms' ? ' orang' : ' pax');
+                        tableContent += `<tr><td colspan="6" class="grade-header">${group.translatedLabel} (${t('total')} ${group.totalStudents}${unit})</td></tr>`;
                         let index = 1;
-                        group.classes.forEach(cls => { cls.students.forEach(stu => { tableContent += `<tr><td>${index++}</td><td>${cls.className}</td><td>${stu.studentName}</td><td>${stu.score||''}</td><td>${stu.rank||''}</td><td></td></tr>`; }); });
+                        group.classes.forEach(cls => { cls.students.forEach(stu => { tableContent += `<tr><td>${index++}</td><td style="text-align:left;padding-left:10px">${stu.studentName}</td><td>${cls.className}</td><td>${stu.score||''}</td><td>${t_rank(stu.rank)||''}</td><td></td></tr>`; }); });
                     });
                     tableContent += `</tbody></table>`;
-                    const win = window.open('', '_blank'); win.document.write(generatePrintHtml('评分记录表', tableContent)); win.document.close();
+                    const win = window.open('', '_blank'); win.document.write(generatePrintHtml(t('print_score_sheet'), tableContent)); win.document.close();
                 };
 
                 const printResults = () => {
-                    let tableContent = `<table><thead><tr><th style="width:20%">名次</th><th style="width:50%">姓名</th><th style="width:15%">班级</th></tr></thead><tbody>`;
+                    let tableContent = `<table><thead><tr><th style="width:15%">${t('th_rank')}</th><th style="width:65%">${t('th_name')}</th><th style="width:20%">${t('th_class')}</th></tr></thead><tbody>`;
                     let hasWinners = false;
                     getSelectedGroupedByGrade().forEach(group => {
                         const winners = [];
                         group.classes.forEach(cls => { cls.students.forEach(stu => { if(stu.rank) winners.push({...stu, className: cls.className}); }); });
                         if(winners.length > 0) {
                             hasWinners = true;
-                            tableContent += `<tr><td colspan="3" class="grade-header">${group.gradeLabel}</td></tr>`;
+                            tableContent += `<tr><td colspan="3" class="grade-header">${group.translatedLabel}</td></tr>`;
                             winners.sort((a,b) => (getRankWeight(b.rank) - getRankWeight(a.rank)) || ((parseFloat(b.score)||0) - (parseFloat(a.score)||0)));
-                            winners.forEach(stu => { tableContent += `<tr><td style="font-weight:bold;">${stu.rank}</td><td style="font-weight:bold;">${stu.studentName}</td><td style="font-size:14px;">${stu.className}</td></tr>`; });
+                            winners.forEach(stu => { tableContent += `<tr><td style="font-weight:normal;">${t_rank(stu.rank)}</td><td style="font-weight:normal;">${stu.studentName}</td><td style="font-size:14px;">${stu.className}</td></tr>`; });
                         }
                     });
-                    if(!hasWinners) tableContent += `<tr><td colspan="3" style="color:#999; padding:20px;">暂无得奖记录</td></tr>`;
+                    if(!hasWinners) tableContent += `<tr><td colspan="3" style="color:#999; padding:20px;">${t('msg_no_winners')}</td></tr>`;
                     tableContent += `</tbody></table>`;
-                    // 修改：不显示签名栏
-                    const content = generatePrintHtml('官方得奖名单', tableContent, false); 
-                    const win = window.open('', '_blank'); win.document.write(content); win.document.close();
+                    const win = window.open('', '_blank'); win.document.write(generatePrintHtml(t('print_winners'), tableContent)); win.document.close();
                 };
 
-                // --- 🎨 海报生成逻辑 (双栏强行分割) ---
+                // --- 🎨 海报生成 (双栏强行分割) ---
                 const openPosterModal = () => {
                     const gradeGroups = getSelectedGroupedByGrade();
                     const left = [], right = [];
-                    
                     gradeGroups.forEach(g => {
                         const winners = [];
                         g.classes.forEach(c => {
-                            c.students.forEach(s => {
-                                if (s.rank) winners.push({ ...s, className: c.className });
-                            });
+                            c.students.forEach(s => { if (s.rank) winners.push({ ...s, className: c.className }); });
                         });
-
                         if (winners.length > 0) {
                             winners.sort((a,b) => (getRankWeight(b.rank) - getRankWeight(a.rank)) || ((parseFloat(b.score)||0) - (parseFloat(a.score)||0)));
-                            
-                            // 强行分组逻辑：1-3年级 -> 左，4-6年级 -> 右
-                            if (['一年级', '二年级', '三年级'].some(k => g.gradeLabel.includes(k)) || ['1', '2', '3'].some(k => g.gradeLabel.startsWith(k))) {
-                                left.push({ gradeLabel: g.gradeLabel, winners });
-                            } else {
-                                right.push({ gradeLabel: g.gradeLabel, winners });
-                            }
+                            if (['1','2','3'].some(k => g.gradeLabel.includes(k))) left.push({ translatedLabel: g.translatedLabel, winners });
+                            else right.push({ translatedLabel: g.translatedLabel, winners });
                         }
                     });
-                    
                     posterData.value = { left, right };
                     posterModal.value.visible = true;
                 };
@@ -1120,37 +1458,73 @@
                 const exportCSV = () => {
                     const groupData = getSelectedGroupedByGrade();
                     let csvContent = "\uFEFF"; 
-                    csvContent += `"比赛项目：${selectedCategory.value}"\n"年级","班级","姓名","分数","名次"\n`;
-                    groupData.forEach(group => { group.classes.forEach(cls => { cls.students.forEach(stu => { csvContent += `"${group.gradeLabel}","${cls.className}","${stu.studentName}","${stu.score || ''}","${stu.rank || ''}"\n`; }); }); });
+                    csvContent += `"${selectedCategory.value}"\n"${t('th_class')}","${t('th_name')}","${t('th_score')}","${t('th_rank')}"\n`;
+                    groupData.forEach(group => { group.classes.forEach(cls => { cls.students.forEach(stu => { csvContent += `"${cls.className}","${stu.studentName}","${stu.score || ''}","${t_rank(stu.rank) || ''}"\n`; }); }); });
                     const link = document.createElement("a");
                     link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
                     link.download = `${selectedCategory.value}_成绩名单.csv`;
                     document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                    showToast('Excel已导出');
+                    showToast('Excel Exported');
                 };
 
                 // Helper Functions
-                const showDialog = (opts) => new Promise(resolve => { modalState.value = { visible: true, type: opts.type || 'alert', title: opts.title || '提示', message: opts.message || '', placeholder: opts.placeholder || '', icon: opts.icon || 'fas fa-info-circle', resolve }; if(['prompt','password'].includes(opts.type)) nextTick(() => modalInput.value?.focus()); });
-                const handleModalConfirm = () => { modalState.value.resolve(modalState.value.type === 'confirm' ? true : modalState.value.inputValue); modalState.value.visible = false; };
-                const handleModalCancel = () => { modalState.value.resolve(false); modalState.value.visible = false; };
+                const showDialog = (opts) => new Promise(resolve => { 
+                    if (modalAutoCloseTimer) clearTimeout(modalAutoCloseTimer);
+                    modalState.value = { 
+                        visible: true, 
+                        type: opts.type || 'alert', 
+                        title: opts.title || 'Info', 
+                        message: opts.message || '', 
+                        placeholder: opts.placeholder || '', 
+                        icon: opts.icon || 'fas fa-info-circle', 
+                        resolve, 
+                        confirmText: opts.confirmText || null,
+                        showButtons: opts.showButtons !== false // Default true
+                    }; 
+                    
+                    if (opts.autoClose) {
+                        modalAutoCloseTimer = setTimeout(() => {
+                            if (modalState.value.visible) {
+                                modalState.value.resolve(true); // Resolve as success
+                                modalState.value.visible = false;
+                            }
+                        }, opts.autoClose);
+                    }
+
+                    if(['prompt','password'].includes(opts.type)) nextTick(() => modalInput.value?.focus()); 
+                });
+                const handleModalConfirm = () => { 
+                    if (modalAutoCloseTimer) clearTimeout(modalAutoCloseTimer);
+                    modalState.value.resolve(modalState.value.type === 'confirm' ? true : modalState.value.inputValue); 
+                    modalState.value.visible = false; 
+                };
+                const handleModalCancel = () => { 
+                    if (modalAutoCloseTimer) clearTimeout(modalAutoCloseTimer);
+                    modalState.value.resolve(false); 
+                    modalState.value.visible = false; 
+                };
                 
                 const enterAdmin = async () => {
                     if (isAdmin.value) { currentTab.value = 'admin'; selectedCategory.value = null; return; }
-                    const pwd = await showDialog({ type: 'password', title: '后台管理', message: '输入管理员密码:', placeholder: '请输入密码', icon: 'fas fa-lock' });
-                    if (pwd === "123456") { isAdmin.value = true; if(await showDialog({ type: 'confirm', title: '登录成功', message: '要去项目管理后台吗？\n(取消则留在大厅管理)', icon: 'fas fa-user-shield' })) currentTab.value = 'admin'; }
-                    else if (pwd !== false) showDialog({ title: '错误', message: '密码错误' });
+                    const pwd = await showDialog({ type: 'password', title: t('admin_title'), message: 'Password:', placeholder: t('ph_password'), icon: 'fas fa-lock', confirmText: t('btn_login') });
+                    if (pwd === "123456") { 
+                        isAdmin.value = true; 
+                        await showDialog({ title: t('toast_success'), message: '管理员模式已开启', showButtons: false, autoClose: 2000, icon: 'fas fa-check-circle' });
+                        // Do NOT switch tab
+                    }
+                    else if (pwd !== false) showDialog({ title: 'Error', message: t('toast_fail') });
                 };
 
                 const getRankWeight = (rank) => {
                     if (!rank) return 0;
-                    if (rank.includes('冠')) return 10000;
-                    if (rank.includes('亚')) return 9000;
-                    if (rank.includes('季')) return 8000;
-                    if (rank.includes('四')) return 7000;
-                    if (rank.includes('五')) return 6000;
-                    if (rank.includes('特优')) return 5000;
-                    if (rank.includes('优秀')) return 4000;
-                    if (rank.includes('安慰')) return 3000;
+                    if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 10000;
+                    if (rank.includes('亚') || rank === 'Runner-up' || rank === 'Naib Johan') return 9000;
+                    if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return 8000;
+                    if (rank.includes('四') || rank === '4th Place' || rank === 'Keempat') return 7000;
+                    if (rank.includes('五') || rank === '5th Place' || rank === 'Kelima') return 6000;
+                    if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return 5000;
+                    if (rank.includes('优秀') || rank === 'Excellence' || rank === 'Kepujian') return 4000;
+                    if (rank.includes('安慰') || rank === 'Consolation' || rank === 'Saguhati') return 3000;
                     return 1000;
                 };
 
@@ -1167,7 +1541,7 @@
                         const classMap = {};
                         students.forEach(s => { const c = s.studentClass || '未分类'; if (!classMap[c]) classMap[c] = []; classMap[c].push(s); });
                         
-                        return { categoryName: catName, organizer: typeof catObj === 'object' ? (catObj.organizer || '') : '', totalCount: students.length, classes: Object.keys(classMap).sort().map(c => ({ className: c, students: classMap[c] })) };
+                        return { categoryName: catName, organizer: typeof catObj === 'object' ? (catObj.organizer || '') : '', status: catObj.status || 'open', totalCount: students.length, classes: Object.keys(classMap).sort().map(c => ({ className: c, students: classMap[c] })) };
                     }).filter(i => i !== null);
                 });
 
@@ -1183,23 +1557,25 @@
                         if (!gradesMap[gradeChar]) gradesMap[gradeChar] = [];
                         gradesMap[gradeChar].push(cls);
                     });
-                    const gradeNames = {'1':'一年级', '2':'二年级', '3':'三年级', '4':'四年级', '5':'五年级', '6':'六年级'};
+                    const gradeNamesZh = {'1':'一年级', '2':'二年级', '3':'三年级', '4':'四年级', '5':'五年级', '6':'六年级'};
                     return Object.keys(gradesMap).sort().map(g => {
                         const classesInGrade = gradesMap[g];
                         const totalStudents = classesInGrade.reduce((sum, cls) => sum + cls.students.length, 0);
-                        return { gradeLabel: gradeNames[g] || (g + '年级'), totalStudents, classes: classesInGrade };
+                        const labelKey = `grade_${g}`;
+                        const translatedLabel = translations[lang.value][labelKey] || (gradeNamesZh[g] || g);
+                        return { gradeLabel: g, translatedLabel, totalStudents, classes: classesInGrade };
                     });
                 };
 
                 const exitCategory = () => {
-                    if (isBatchEditing.value && !confirm("您正在录入模式，退出将丢失未保存的更改。确定要退出吗？")) return;
+                    if (isBatchEditing.value && !confirm("Exit batch mode? Unsaved changes will be lost.")) return;
                     isBatchEditing.value = false; selectedCategory.value = null;
                 };
 
                 const getCategoryIcon = (n) => {
                     if (!n) return 'fas fa-trophy';
-                    if(n.includes('剪纸')) return 'fas fa-cut';
-                    if(n.includes('挥春')) return 'fas fa-paint-brush';
+                    if(n.includes('剪纸') || n.toLowerCase().includes('cutting')) return 'fas fa-cut';
+                    if(n.includes('挥春') || n.toLowerCase().includes('calligraphy')) return 'fas fa-paint-brush';
                     if(n.includes('华语')||n.includes('故事')) return 'fas fa-book-open';
                     if(n.includes('英')||n.includes('朗读')) return 'fas fa-language';
                     if(n.includes('书')||n.includes('笔')) return 'fas fa-pen-nib';
@@ -1212,12 +1588,12 @@
                 
                 const getRankClass = (rank) => {
                     if (!rank) return '';
-                    if (rank.includes('冠')) return 'bg-yellow-100 text-yellow-700 border border-yellow-200';
-                    if (rank.includes('亚')) return 'bg-gray-200 text-gray-700 border border-gray-300';
-                    if (rank.includes('季')) return 'bg-orange-100 text-orange-700 border border-orange-200';
-                    if (rank.includes('四')) return 'bg-teal-100 text-teal-700 border border-teal-200';
-                    if (rank.includes('五')) return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
-                    if (rank.includes('特优')) return 'bg-purple-100 text-purple-700 border border-purple-200';
+                    if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'bg-yellow-100 text-yellow-700 border border-yellow-200';
+                    if (rank.includes('亚') || rank === 'Runner-up' || rank === 'Naib Johan') return 'bg-gray-200 text-gray-700 border border-gray-300';
+                    if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return 'bg-orange-100 text-orange-700 border border-orange-200';
+                    if (rank.includes('四') || rank === '4th Place' || rank === 'Keempat') return 'bg-teal-100 text-teal-700 border border-teal-200';
+                    if (rank.includes('五') || rank === '5th Place' || rank === 'Kelima') return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+                    if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return 'bg-purple-100 text-purple-700 border border-purple-200';
                     return 'bg-blue-50 text-blue-600 border border-blue-100';
                 };
 
@@ -1233,16 +1609,14 @@
                     scoreModal, openScoreModal, submitScore, 
                     printRoster, printScoringSheet, printResults, exportCSV, downloadPoster,
                     deleteRegistration, startBatchEdit, cancelBatchEdit, saveBatchEdit,
-                    editCategoryModal, openEditCategory, submitEditCategory,
+                    editCategoryModal, openEditCategory, submitEditCategory, toggleStatus, getCategoryStatus, activeCompetitions,
                     enterAdmin, adminAddItem, adminDeleteItem, submitForm, fetchAllData,
-                    posterModal, posterData // Poster
+                    posterModal, posterData,
+                    t, setLang, currentLangLabel, rankOptions, t_rank,
+                    addClassGroup, removeClassGroup, addStudentRow, removeStudentRow, getStudentsByClass 
                 };
             }
         }).mount('#app');
     </script>
 </body>
 </html>
-
-
-
-
