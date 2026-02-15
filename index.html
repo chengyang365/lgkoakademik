@@ -165,16 +165,22 @@
                                  @click="selectedCategory = group.categoryName"
                                  class="bg-white rounded-2xl shadow-md border-2 border-transparent hover:border-orange-400 hover:shadow-xl transition cursor-pointer p-6 flex flex-col items-center text-center group h-full transform hover:-translate-y-1 relative overflow-hidden">
                                 
-                                <!-- 状态角标 -->
-                                <div v-if="group.status === 'closed'" class="absolute top-0 right-0 bg-gray-500 text-white text-xs px-2 py-1 rounded-bl-lg font-bold z-10">{{ t('status_ended') }}</div>
+                                <!-- 状态角标 (自动截止/手动结束) -->
+                                <div v-if="group.effectiveStatus !== 'open'" class="absolute top-0 right-0 bg-gray-500 text-white text-xs px-2 py-1 rounded-bl-lg font-bold z-10">
+                                    {{ group.effectiveStatus === 'auto_closed' ? t('status_auto_ended') : t('status_ended') }}
+                                </div>
 
                                 <div class="w-16 h-16 rounded-full bg-orange-100 text-orange-500 flex items-center justify-center text-3xl mb-4 shadow-inner">
                                     <i :class="getCategoryIcon(group.categoryName)"></i>
                                 </div>
-                                <h3 class="text-lg font-bold text-gray-800 mb-2">{{ group.categoryName }}</h3>
-                                <div class="mt-auto w-full pt-2">
-                                    <span :class="group.status === 'closed' ? 'bg-gray-200 text-gray-500' : 'bg-green-500 text-white'" class="text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
-                                        {{ group.status === 'closed' ? t('status_ended') : t('label_ongoing') }}
+                                <h3 class="text-lg font-bold text-gray-800 mb-1">{{ group.categoryName }}</h3>
+                                <div v-if="group.startDate || group.endDate" class="text-xs text-gray-400 mb-2">
+                                    <i class="far fa-calendar-alt mr-1"></i>{{ formatDate(group.startDate) }} <span v-if="group.endDate">- {{ formatDate(group.endDate) }}</span>
+                                </div>
+                                
+                                <div class="mt-auto w-full pt-2 border-t border-gray-50">
+                                    <span :class="group.effectiveStatus !== 'open' ? 'bg-gray-200 text-gray-500' : 'bg-green-500 text-white'" class="text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                        {{ group.effectiveStatus !== 'open' ? (group.effectiveStatus === 'auto_closed' ? t('status_auto_ended') : t('status_ended')) : t('label_ongoing') }}
                                     </span>
                                     <div class="text-gray-500 text-sm mt-2">{{ t('label_registered') }}: <span class="text-xl font-bold text-orange-600">{{ group.totalCount }}</span> {{ t('unit_person') }}</div>
                                 </div>
@@ -196,11 +202,16 @@
                                 </button>
                                 <div>
                                     <h2 class="text-lg font-bold text-gray-800">{{ selectedCategory }}</h2>
-                                    <div class="flex items-center gap-2 mt-1">
-                                        <span v-if="getSelectedGroupOrganizer()" class="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                                            <i class="fas fa-building mr-1"></i> {{ t('label_organizer') }}: {{ getSelectedGroupOrganizer() }}
-                                        </span>
-                                        <span v-if="isBatchEditing" class="text-xs text-red-500 font-bold animate-pulse">● {{ t('mode_entry') }}</span>
+                                    <div class="flex flex-col gap-1 mt-1">
+                                        <div class="flex items-center gap-2">
+                                            <span v-if="getSelectedGroupOrganizer()" class="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                                                <i class="fas fa-building mr-1"></i> {{ t('label_organizer') }}: {{ getSelectedGroupOrganizer() }}
+                                            </span>
+                                            <span v-if="isBatchEditing" class="text-xs text-red-500 font-bold animate-pulse">● {{ t('mode_entry') }}</span>
+                                        </div>
+                                        <div v-if="getSelectedGroupDateRange()" class="text-xs text-gray-400">
+                                            <i class="far fa-clock mr-1"></i> {{ getSelectedGroupDateRange() }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -216,7 +227,7 @@
                                 </button>
                                 
                                 <!-- 生成海报按钮 -->
-                                <button v-if="isAdmin" @click="openPosterModal" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm text-sm flex items-center transition">
+                                <button v-if="isAdmin" @click="openPosterModal(selectedCategory)" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm text-sm flex items-center transition">
                                     <i class="fas fa-image mr-2"></i> {{ t('btn_poster') }}
                                 </button>
 
@@ -238,11 +249,13 @@
                                     </div>
                                 </div>
 
-                                <button @click="goToRegister(selectedCategory)" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow text-sm flex items-center transition">
+                                <!-- 智能禁用报名按钮 (如果是 closed 或 auto_closed) -->
+                                <button @click="goToRegister(selectedCategory)" :disabled="getCategoryStatus(selectedCategory) !== 'open'" :class="getCategoryStatus(selectedCategory) !== 'open' ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'" class="text-white px-4 py-2 rounded-lg font-bold shadow text-sm flex items-center transition">
                                     <i class="fas fa-plus-circle mr-2"></i> {{ t('btn_add_reg') }}
                                 </button>
                             </div>
                             
+                            <!-- 批量编辑操作栏 -->
                             <div v-if="isBatchEditing" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-4 z-50 flex justify-between items-center no-print">
                                 <div class="text-sm text-gray-600">
                                     <span v-if="isSubmitting"><i class="fas fa-spinner fa-spin mr-2"></i> {{ t('status_saving') }}</span>
@@ -256,7 +269,7 @@
                                 </div>
                             </div>
 
-                            <!-- 按年级分组循环 -->
+                            <!-- 分组循环 -->
                             <div v-for="(gradeGroup, gIndex) in (isBatchEditing ? batchEditData : getSelectedGroupedByGrade())" :key="gIndex" class="mb-8 break-inside-avoid">
                                 <div class="flex items-center mb-4">
                                     <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-bold text-sm shadow-sm border border-blue-200">
@@ -276,7 +289,7 @@
                                                 <span class="font-medium text-gray-700 flex items-center">{{ stu.studentName }}</span>
                                                 <div class="flex items-center gap-1">
                                                     <span v-if="stu.rank" :class="getRankClass(stu.rank)" class="text-xs px-2 py-0.5 rounded font-bold scale-90 whitespace-nowrap">{{ t_rank(stu.rank) }}</span>
-                                                    <span v-else-if="stu.score" class="text-gray-500 font-mono text-xs bg-gray-100 px-1 rounded">{{ stu.score }}</span>
+                                                    <span v-else-if="stu.score" class="text-gray-500 font-mono text-xs bg-gray-100 px-1 rounded">{{ stu.score }}分</span>
                                                     <button v-if="isAdmin" @click.stop="deleteRegistration(stu, cls.className)" class="text-gray-300 hover:text-red-500 p-1 transition opacity-0 group-hover:opacity-100 no-print"><i class="fas fa-trash-alt"></i></button>
                                                     <button v-if="isAdmin" @click.stop="openScoreModal(stu, cls.className)" class="text-gray-300 hover:text-blue-500 p-1 transition opacity-0 group-hover:opacity-100 no-print"><i class="fas fa-pencil-alt"></i></button>
                                                 </div>
@@ -318,7 +331,7 @@
                         
                         <div v-if="getSelectedGroupCount() === 0" class="text-center py-16 bg-white rounded-xl border-2 border-dashed border-gray-200 no-print">
                             <p class="text-gray-500 mb-4">{{ t('msg_no_records') }}</p>
-                            <button @click="goToRegister(selectedCategory)" :disabled="getCategoryStatus(selectedCategory) === 'closed'" :class="getCategoryStatus(selectedCategory) === 'closed' ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'" class="text-white px-6 py-2 rounded-full font-bold shadow">{{ t('btn_go_register') }}</button>
+                            <button @click="goToRegister(selectedCategory)" :disabled="getCategoryStatus(selectedCategory) !== 'open'" :class="getCategoryStatus(selectedCategory) !== 'open' ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'" class="text-white px-6 py-2 rounded-full font-bold shadow">{{ t('btn_go_register') }}</button>
                         </div>
                     </div>
                 </div>
@@ -339,7 +352,6 @@
                     </div>
 
                     <form @submit.prevent="submitForm" class="space-y-6">
-                        <!-- Project Selection -->
                         <div class="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
                             <label class="block text-sm font-bold text-gray-700 mb-2">{{ t('label_item') }}</label>
                             <select v-model="form.category" required class="w-full rounded-lg border-2 border-yellow-300 p-3 outline-none bg-white font-medium text-gray-800">
@@ -349,9 +361,7 @@
                             <p v-if="activeCompetitions.length === 0" class="text-xs text-red-500 mt-2">* {{ t('msg_no_competitions') }}</p>
                         </div>
 
-                        <!-- Class Groups -->
                         <div v-for="(group, gIndex) in form.groups" :key="group.id" class="bg-blue-50 p-4 rounded-xl border border-blue-100 relative">
-                             <!-- Remove Class Group Button -->
                             <button v-if="form.groups.length > 1" type="button" @click="removeClassGroup(gIndex)" class="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-sm" :title="t('btn_remove_class')">
                                 <i class="fas fa-times"></i>
                             </button>
@@ -377,7 +387,6 @@
                                                     <option v-for="stuName in getStudentsByClass(group.class)" :key="stuName" :value="stuName">{{ stuName }}</option>
                                                 </select>
                                             </div>
-                                             <!-- Remove Student Row Button -->
                                             <button v-if="group.students.length > 1" type="button" @click="removeStudentRow(gIndex, sIndex)" class="text-gray-300 hover:text-red-500 px-1">
                                                 <i class="fas fa-minus-circle"></i>
                                             </button>
@@ -392,8 +401,7 @@
                             </div>
                         </div>
 
-                         <!-- Add Class Group Button -->
-                        <div class="text-center">
+                         <div class="text-center">
                             <button type="button" @click="addClassGroup" class="bg-gray-100 text-gray-600 hover:bg-gray-200 px-4 py-2 rounded-lg font-bold text-sm border border-gray-300 shadow-sm transition">
                                 <i class="fas fa-layer-group mr-1"></i> {{ t('btn_add_class') }}
                             </button>
@@ -421,12 +429,15 @@
                     <div class="p-6">
                         <div class="mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
                             <label class="block text-sm font-bold text-gray-700 mb-2">{{ t('label_add_item') }}</label>
-                            <div class="flex gap-2">
-                                <input v-model="adminNewItemName" :disabled="isSubmitting" type="text" :placeholder="t('ph_item_name')" class="flex-grow border border-gray-300 rounded-lg px-4 py-2 outline-none focus:border-green-500">
-                                <input v-model="adminNewItemOrg" :disabled="isSubmitting" @keyup.enter="adminAddItem" type="text" :placeholder="t('ph_organizer')" class="w-1/3 border border-gray-300 rounded-lg px-4 py-2 outline-none focus:border-green-500">
-                                <button @click="adminAddItem" :disabled="isSubmitting" class="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
-                                    <i v-if="isSubmitting" class="fas fa-spinner fa-spin"></i> {{ t('btn_add') }}
-                                </button>
+                            <div class="flex flex-col gap-2">
+                                <input v-model="adminNewItemName" :disabled="isSubmitting" type="text" :placeholder="t('ph_item_name')" class="w-full border border-gray-300 rounded-lg px-4 py-2 outline-none focus:border-green-500">
+                                <div class="flex gap-2">
+                                    <input v-model="adminNewItemOrg" :disabled="isSubmitting" type="text" :placeholder="t('ph_organizer')" class="flex-grow border border-gray-300 rounded-lg px-4 py-2 outline-none focus:border-green-500">
+                                    <input v-model="adminNewItemStartDate" :disabled="isSubmitting" type="date" class="border border-gray-300 rounded-lg px-2 py-2 outline-none focus:border-green-500 text-sm text-gray-600">
+                                    <span class="self-center text-gray-400">-</span>
+                                    <input v-model="adminNewItemEndDate" :disabled="isSubmitting" type="date" class="border border-gray-300 rounded-lg px-2 py-2 outline-none focus:border-green-500 text-sm text-gray-600">
+                                    <button @click="adminAddItem" :disabled="isSubmitting" class="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"><i v-if="isSubmitting" class="fas fa-spinner fa-spin"></i> {{ t('btn_add') }}</button>
+                                </div>
                             </div>
                         </div>
                         <div>
@@ -434,15 +445,17 @@
                             <ul class="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                                 <li v-for="(item, index) in competitionItems" :key="index" class="flex justify-between items-center p-3 bg-white border border-gray-100 rounded-lg shadow-sm hover:shadow-md transition">
                                     <div class="flex items-center">
-                                        <!-- 状态切换按钮 -->
                                         <button @click="toggleStatus(item)" class="mr-3 text-lg transition-transform active:scale-90 focus:outline-none" :title="item.status === 'closed' ? t('btn_start_comp') : t('btn_end_comp')">
                                             <i class="fas" :class="item.status === 'closed' ? 'fa-play-circle text-green-500' : 'fa-pause-circle text-gray-400'"></i>
                                         </button>
-
                                         <i :class="getCategoryIcon(item.name)" class="text-orange-400 mr-3 w-6 text-center"></i>
                                         <div class="flex flex-col">
                                             <span class="font-bold text-gray-800" :class="{'line-through text-gray-400': item.status === 'closed'}">{{ item.name }}</span>
-                                            <span v-if="item.organizer" class="text-xs text-gray-400">{{ t('label_organizer') }}: {{ item.organizer }}</span>
+                                            <div class="flex gap-2 text-xs text-gray-400">
+                                                 <span v-if="item.organizer">{{ t('label_organizer') }}: {{ item.organizer }}</span>
+                                                 <span v-if="item.startDate"> | {{ formatDate(item.startDate) }} <span v-if="item.endDate">- {{ formatDate(item.endDate) }}</span></span>
+                                                 <span v-if="getCategoryStatus(item.name) === 'closed' && item.status === 'open'" class="text-red-500 font-bold">({{ t('status_auto_ended') }})</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="flex gap-2">
@@ -466,83 +479,47 @@
                         <h3 class="font-bold text-lg"><i class="fas fa-image mr-2"></i>{{ t('poster_title') }}</h3>
                         <button @click="posterModal.visible = false"><i class="fas fa-times"></i></button>
                     </div>
-                    
                     <div class="overflow-y-auto p-4 flex-grow bg-gray-100 flex justify-center">
                         <div id="poster-container" class="poster-container w-[900px] min-h-[700px] p-8 relative shadow-2xl rounded-sm flex flex-col">
                             <div class="absolute top-0 left-0 w-32 h-32 border-t-8 border-l-8 border-yellow-400 rounded-tl-3xl m-6 opacity-60"></div>
                             <div class="absolute bottom-0 right-0 w-32 h-32 border-b-8 border-r-8 border-yellow-400 rounded-br-3xl m-6 opacity-60"></div>
-                            
                             <div class="text-center mb-8 relative z-10">
                                 <div class="text-yellow-200 text-xl mb-1 tracking-[0.2em] font-bold">{{ t('school_name') }}</div>
                                 <h1 class="text-5xl font-bold text-white mb-3 text-shadow-lg tracking-wider">{{ selectedCategory }}</h1>
-                                <div class="inline-block bg-gradient-to-r from-yellow-600 to-yellow-400 text-white border-2 border-yellow-200 px-8 py-1 rounded-full font-bold text-2xl shadow-xl mt-2">
-                                    {{ t('poster_subtitle') }}
-                                </div>
+                                <div class="inline-block bg-gradient-to-r from-yellow-600 to-yellow-400 text-white border-2 border-yellow-200 px-8 py-1 rounded-full font-bold text-2xl shadow-xl mt-2">{{ t('poster_subtitle') }}</div>
                             </div>
-
                             <div class="flex-grow relative z-10 flex gap-10 items-start">
-                                <!-- Left -->
                                 <div class="flex-1 space-y-6">
                                     <div v-for="(group, idx) in posterData.left" :key="'L'+idx">
-                                        <div class="flex items-center mb-3">
-                                            <div class="h-[2px] bg-yellow-400/50 flex-grow"></div>
-                                            <span class="mx-4 text-yellow-200 font-bold text-xl">{{ group.translatedLabel }}</span>
-                                            <div class="h-[2px] bg-yellow-400/50 flex-grow"></div>
-                                        </div>
+                                        <div class="flex items-center mb-3"><div class="h-[2px] bg-yellow-400/50 flex-grow"></div><span class="mx-4 text-yellow-200 font-bold text-xl">{{ group.translatedLabel }}</span><div class="h-[2px] bg-yellow-400/50 flex-grow"></div></div>
                                         <div class="grid grid-cols-1 gap-2">
                                             <div v-for="stu in group.winners" :key="stu.rowIndex" class="poster-card p-3 rounded flex items-center justify-between">
-                                                <div>
-                                                    <div class="text-red-800 font-bold text-lg leading-tight">{{ stu.studentName }}</div>
-                                                    <div class="text-gray-500 text-xs mt-0.5">{{ stu.className }}</div>
-                                                </div>
-                                                <div class="text-right">
-                                                    <span class="inline-block bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold">{{ t_rank(stu.rank) }}</span>
-                                                </div>
+                                                <div><div class="text-red-800 font-bold text-lg leading-tight">{{ stu.studentName }}</div><div class="text-gray-500 text-xs mt-0.5">{{ stu.className }}</div></div>
+                                                <div class="text-right"><span class="inline-block bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold">{{ t_rank(stu.rank) }}</span></div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                
                                 <div class="w-[2px] bg-yellow-400/30 self-stretch rounded-full"></div>
-                                
-                                <!-- Right -->
                                 <div class="flex-1 space-y-6">
                                     <div v-for="(group, idx) in posterData.right" :key="'R'+idx">
-                                        <div class="flex items-center mb-3">
-                                            <div class="h-[2px] bg-yellow-400/50 flex-grow"></div>
-                                            <span class="mx-4 text-yellow-200 font-bold text-xl">{{ group.translatedLabel }}</span>
-                                            <div class="h-[2px] bg-yellow-400/50 flex-grow"></div>
-                                        </div>
+                                        <div class="flex items-center mb-3"><div class="h-[2px] bg-yellow-400/50 flex-grow"></div><span class="mx-4 text-yellow-200 font-bold text-xl">{{ group.translatedLabel }}</span><div class="h-[2px] bg-yellow-400/50 flex-grow"></div></div>
                                         <div class="grid grid-cols-1 gap-2">
                                             <div v-for="stu in group.winners" :key="stu.rowIndex" class="poster-card p-3 rounded flex items-center justify-between">
-                                                <div>
-                                                    <div class="text-red-800 font-bold text-lg leading-tight">{{ stu.studentName }}</div>
-                                                    <div class="text-gray-500 text-xs mt-0.5">{{ stu.className }}</div>
-                                                </div>
-                                                <div class="text-right">
-                                                    <span class="inline-block bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold">{{ t_rank(stu.rank) }}</span>
-                                                </div>
+                                                <div><div class="text-red-800 font-bold text-lg leading-tight">{{ stu.studentName }}</div><div class="text-gray-500 text-xs mt-0.5">{{ stu.className }}</div></div>
+                                                <div class="text-right"><span class="inline-block bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold">{{ t_rank(stu.rank) }}</span></div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-
-                            <div v-if="!posterData.left.length && !posterData.right.length" class="absolute inset-0 flex items-center justify-center text-white/50 text-xl font-bold">
-                                {{ t('msg_no_winners') }}
-                            </div>
-
-                            <div class="text-center mt-10 text-yellow-200/60 text-xs">
-                                {{ t('school_name') }} · {{ new Date().toLocaleDateString() }}
-                            </div>
+                            <div v-if="!posterData.left.length && !posterData.right.length" class="absolute inset-0 flex items-center justify-center text-white/50 text-xl font-bold">{{ t('msg_no_winners') }}</div>
+                            <div class="text-center mt-10 text-yellow-200/60 text-xs">{{ t('school_name') }} · {{ new Date().toLocaleDateString() }}</div>
                         </div>
                     </div>
-
                     <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3 shrink-0">
                         <button @click="posterModal.visible = false" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-bold">{{ t('btn_close') }}</button>
-                        <button @click="downloadPoster" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-lg font-bold flex items-center">
-                            <i class="fas fa-download mr-2"></i> {{ t('btn_save_img') }}
-                        </button>
+                        <button @click="downloadPoster" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-lg font-bold flex items-center"><i class="fas fa-download mr-2"></i> {{ t('btn_save_img') }}</button>
                     </div>
                 </div>
             </div>
@@ -560,7 +537,6 @@
                         <p class="text-gray-600 mb-4 whitespace-pre-line">{{ modalState.message }}</p>
                         <input v-if="['prompt', 'password'].includes(modalState.type)" :type="modalState.type === 'password' ? 'password' : 'text'" v-model="modalState.inputValue" @keyup.enter="handleModalConfirm" ref="modalInput" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-orange-500" :placeholder="modalState.placeholder">
                     </div>
-                    <!-- 控制按钮显示 -->
                     <div v-if="modalState.showButtons !== false" class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
                         <button v-if="modalState.type !== 'alert'" @click="handleModalCancel" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold">{{ t('btn_cancel') }}</button>
                         <button @click="handleModalConfirm" class="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-bold">{{ modalState.confirmText || t('btn_confirm') }}</button>
@@ -586,15 +562,15 @@
                             <label class="block text-sm font-bold text-gray-700 mb-1">{{ t('label_organizer') }}</label>
                             <input type="text" v-model="editCategoryModal.organizer" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="如：教务处">
                         </div>
-                        <div class="bg-yellow-50 p-3 rounded text-xs text-yellow-800">
-                            <i class="fas fa-info-circle mr-1"></i> {{ t('hint_edit_sync') }}
+                        <div class="flex gap-2">
+                            <div class="flex-1"><label class="block text-sm font-bold text-gray-700 mb-1">{{ t('label_start_date') }}</label><input type="date" v-model="editCategoryModal.startDate" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"></div>
+                            <div class="flex-1"><label class="block text-sm font-bold text-gray-700 mb-1">{{ t('label_end_date') }}</label><input type="date" v-model="editCategoryModal.endDate" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"></div>
                         </div>
+                        <div class="bg-yellow-50 p-3 rounded text-xs text-yellow-800"><i class="fas fa-info-circle mr-1"></i> {{ t('hint_edit_sync') }}</div>
                     </div>
                     <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
                         <button @click="editCategoryModal.visible = false" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold">{{ t('btn_cancel') }}</button>
-                        <button @click="submitEditCategory" :disabled="isSubmitting" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold disabled:opacity-50 flex items-center">
-                            <i v-if="isSubmitting" class="fas fa-spinner fa-spin mr-2"></i> {{ t('btn_save') }}
-                        </button>
+                        <button @click="submitEditCategory" :disabled="isSubmitting" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold disabled:opacity-50 flex items-center"><i v-if="isSubmitting" class="fas fa-spinner fa-spin mr-2"></i> {{ t('btn_save') }}</button>
                     </div>
                 </div>
             </div>
@@ -609,34 +585,14 @@
                         <button @click="scoreModal.visible = false"><i class="fas fa-times"></i></button>
                     </div>
                     <div class="p-6 space-y-4">
-                        <div class="bg-blue-50 p-3 rounded text-sm text-blue-800">
-                            <strong>{{ scoreModal.className }}</strong> - <strong>{{ scoreModal.studentName }}</strong>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">{{ t('th_score') }}</label>
-                            <input type="text" v-model="scoreModal.score" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 95">
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">{{ t('th_rank') }}</label>
-                            <select v-model="scoreModal.rank" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                                <option value="">-</option>
-                                <option v-for="r in rankOptions" :key="r" :value="r">{{ t_rank(r) }}</option>
-                            </select>
-                        </div>
-
-                        <!-- 🔒 密码验证 -->
-                        <div>
-                            <label class="block text-sm font-bold text-red-600 mb-1">{{ t('label_password') }}</label>
-                            <input type="password" v-model="scoreModal.password" class="w-full border-2 border-red-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-red-500 bg-red-50" :placeholder="t('ph_password')">
-                        </div>
+                        <div class="bg-blue-50 p-3 rounded text-sm text-blue-800"><strong>{{ scoreModal.className }}</strong> - <strong>{{ scoreModal.studentName }}</strong></div>
+                        <div><label class="block text-sm font-bold text-gray-700 mb-1">{{ t('th_score') }}</label><input type="text" v-model="scoreModal.score" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: 95"></div>
+                        <div><label class="block text-sm font-bold text-gray-700 mb-1">{{ t('th_rank') }}</label><select v-model="scoreModal.rank" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white"><option value="">-</option><option v-for="r in rankOptions" :key="r" :value="r">{{ t_rank(r) }}</option></select></div>
+                        <div><label class="block text-sm font-bold text-red-600 mb-1">{{ t('label_password') }}</label><input type="password" v-model="scoreModal.password" class="w-full border-2 border-red-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-red-500 bg-red-50" :placeholder="t('ph_password')"></div>
                     </div>
                     <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
                         <button @click="scoreModal.visible = false" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold">{{ t('btn_cancel') }}</button>
-                        <button @click="submitScore" :disabled="isSubmitting" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold disabled:opacity-50 flex items-center">
-                            <i v-if="isSubmitting" class="fas fa-spinner fa-spin mr-2"></i> {{ t('btn_confirm') }}
-                        </button>
+                        <button @click="submitScore" :disabled="isSubmitting" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold disabled:opacity-50 flex items-center"><i v-if="isSubmitting" class="fas fa-spinner fa-spin mr-2"></i> {{ t('btn_confirm') }}</button>
                     </div>
                 </div>
             </div>
@@ -648,7 +604,7 @@
         const { createApp, ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
 
         // ⚠️ 重要：替换为你最新的 Web App URL
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx6o9Gp--zJyS0Vkd0xzqYK4-yh1QXnXAMUCLJg9W5S4CDVw1npUsxNT7OmZ9AVirM8/exec"; 
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyoV5zlNkMmZ72OfGsHhq8tRnGANyFQ4L0cWKDsHmLuUm6GaOgQuAdBBHhfhxlQhAEX/exec"; 
 
         const translations = {
             zh: {
@@ -723,6 +679,7 @@
                 label_password: "操作密码",
                 ph_password: "请输入密码",
                 status_ended: "已结束",
+                status_auto_ended: "日期截止",
                 btn_end_comp: "结束比赛",
                 btn_start_comp: "恢复比赛",
                 toast_success: "操作成功",
@@ -733,6 +690,8 @@
                 btn_add_class: "增加班级",
                 btn_remove_class: "移除班级",
                 btn_login: "登入",
+                label_start_date: "开始日期",
+                label_end_date: "结束日期",
                 grade_1: "一年级", grade_2: "二年级", grade_3: "三年级", grade_4: "四年级", grade_5: "五年级", grade_6: "六年级",
                 rank_champ: "冠军", rank_runnerup: "亚军", rank_3rd: "季军", rank_4th: "第四名", rank_5th: "第五名",
                 rank_distinction: "特优奖", rank_excellence: "优秀奖", rank_consolation: "安慰奖"
@@ -809,6 +768,7 @@
                 label_password: "Kata Laluan Operasi",
                 ph_password: "Masukkan kata laluan",
                 status_ended: "Tamat",
+                status_auto_ended: "Tamat (Tarikh)",
                 btn_end_comp: "Tamatkan Acara",
                 btn_start_comp: "Sambung Semula",
                 toast_success: "Berjaya",
@@ -819,6 +779,8 @@
                 btn_add_class: "Tambah Kelas",
                 btn_remove_class: "Hapus Kelas",
                 btn_login: "Log Masuk",
+                label_start_date: "Tarikh Mula",
+                label_end_date: "Tarikh Tamat",
                 grade_1: "Tahun 1", grade_2: "Tahun 2", grade_3: "Tahun 3", grade_4: "Tahun 4", grade_5: "Tahun 5", grade_6: "Tahun 6",
                 rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Ketiga", rank_4th: "Keempat", rank_5th: "Kelima",
                 rank_distinction: "Cemerlang", rank_excellence: "Kepujian", rank_consolation: "Saguhati"
@@ -895,6 +857,7 @@
                 label_password: "Operation Password",
                 ph_password: "Enter password",
                 status_ended: "Ended",
+                status_auto_ended: "Ended (Date)",
                 btn_end_comp: "End Competition",
                 btn_start_comp: "Resume Competition",
                 toast_success: "Success",
@@ -905,6 +868,8 @@
                 btn_add_class: "Add Class",
                 btn_remove_class: "Remove Class",
                 btn_login: "Login",
+                label_start_date: "Start Date",
+                label_end_date: "End Date",
                 grade_1: "Year 1", grade_2: "Year 2", grade_3: "Year 3", grade_4: "Year 4", grade_5: "Year 5", grade_6: "Year 6",
                 rank_champ: "Champion", rank_runnerup: "Runner-up", rank_3rd: "3rd Place", rank_4th: "4th Place", rank_5th: "5th Place",
                 rank_distinction: "Distinction", rank_excellence: "Excellence", rank_consolation: "Consolation"
@@ -954,12 +919,16 @@
                 const keepClassInfo = ref(true);
                 const adminNewItemName = ref('');
                 const adminNewItemOrg = ref('');
+                const adminNewItemStartDate = ref('');
+                const adminNewItemEndDate = ref('');
                 const searchQuery = ref('');
 
+                // Helper to get students by class
                 const getStudentsByClass = (className) => {
                     return studentDB.value[className] || [];
                 };
 
+                // Form Management Functions
                 const addClassGroup = () => {
                     form.value.groups.push({ id: Date.now(), class: '', students: [''] });
                 };
@@ -982,7 +951,7 @@
                 const toastState = ref({ visible: false, message: '', type: 'success' });
                 
                 const scoreModal = ref({ visible: false, studentName: '', className: '', score: '', rank: '', category: '', password: '' });
-                const editCategoryModal = ref({ visible: false, oldName: '', newName: '', organizer: '' });
+                const editCategoryModal = ref({ visible: false, oldName: '', newName: '', organizer: '', startDate: '', endDate: '' });
                 const posterModal = ref({ visible: false });
                 const posterData = ref({ left: [], right: [] }); 
 
@@ -1067,7 +1036,7 @@
                     try {
                         const items = await fetchAPI('getCompetitions');
                         const normalizedItems = Array.isArray(items) 
-                            ? items.map(i => typeof i === 'string' ? {name: i, organizer: '', status: 'open'} : i)
+                            ? items.map(i => typeof i === 'string' ? {name: i, organizer: '', status: 'open', startDate: '', endDate: ''} : i)
                             : [];
                         competitionItems.value = normalizedItems;
                         initStatus.value.items = true;
@@ -1110,7 +1079,7 @@
                             const uniqueMap = new Map();
                             parsed.forEach(item => {
                                 if (typeof item === 'string') {
-                                    if (!uniqueMap.has(item)) uniqueMap.set(item, { name: item, organizer: '', status: 'open' });
+                                    if (!uniqueMap.has(item)) uniqueMap.set(item, { name: item, organizer: '', status: 'open', startDate: '', endDate: '' });
                                 } else if (item && item.name) {
                                     if (!uniqueMap.has(item.name)) uniqueMap.set(item.name, item);
                                 }
@@ -1136,15 +1105,27 @@
                 watch(competitionItems, (newVal) => { localStorage.setItem('school_competition_items', JSON.stringify(newVal)); }, { deep: true });
                 onUnmounted(() => { if (autoRefreshTimer) clearInterval(autoRefreshTimer); });
 
+                const formatDate = (dateString) => {
+                    if (!dateString) return '';
+                    const date = new Date(dateString);
+                    if (isNaN(date.getTime())) return dateString; 
+                    return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/');
+                };
+
                 const adminAddItem = async () => {
                     const name = adminNewItemName.value.trim();
                     const organizer = adminNewItemOrg.value.trim();
+                    const startDate = adminNewItemStartDate.value;
+                    const endDate = adminNewItemEndDate.value;
+
                     if (!name) return showDialog({ title: 'Info', message: 'Name empty' });
                     isSubmitting.value = true;
                     try {
-                        await fetchAPI('addCompetition', { name, organizer });
+                        await fetchAPI('addCompetition', { name, organizer, startDate, endDate });
                         adminNewItemName.value = '';
                         adminNewItemOrg.value = '';
+                        adminNewItemStartDate.value = '';
+                        adminNewItemEndDate.value = '';
                         await fetchAllData(); 
                         showToast(t('toast_success'));
                     } catch(e) { console.error(e); }
@@ -1173,15 +1154,28 @@
                 };
 
                 const openEditCategory = (item) => {
-                    editCategoryModal.value = { visible: true, oldName: item.name, newName: item.name, organizer: item.organizer || '' };
+                    editCategoryModal.value = { 
+                        visible: true, 
+                        oldName: item.name, 
+                        newName: item.name, 
+                        organizer: item.organizer || '',
+                        startDate: item.startDate || '', 
+                        endDate: item.endDate || ''     
+                    };
                 };
 
                 const submitEditCategory = async () => {
-                    const { oldName, newName, organizer } = editCategoryModal.value;
+                    const { oldName, newName, organizer, startDate, endDate } = editCategoryModal.value;
                     if (!newName.trim()) return showDialog({ title: 'Info', message: 'Name empty' });
                     isSubmitting.value = true;
                     try {
-                        await fetchAPI('editCompetition', { oldName, newName: newName.trim(), organizer: organizer.trim() });
+                        await fetchAPI('editCompetition', { 
+                            oldName, 
+                            newName: newName.trim(), 
+                            organizer: organizer.trim(),
+                            startDate,
+                            endDate
+                        });
                         editCategoryModal.value.visible = false;
                         if (selectedCategory.value === oldName) selectedCategory.value = newName.trim();
                         await fetchAllData();
@@ -1191,10 +1185,39 @@
 
                 const getCategoryStatus = (name) => {
                     const item = competitionItems.value.find(i => i.name === name);
-                    return item ? item.status : 'open';
+                    if (!item) return 'closed';
+                    if (item.status === 'closed') return 'closed';
+                    if (item.endDate) {
+                        const today = new Date();
+                        today.setHours(0,0,0,0);
+                        const end = new Date(item.endDate);
+                        if (today > end) return 'closed'; // Auto close logic handled by UI text
+                    }
+                    return 'open';
                 };
 
-                const activeCompetitions = computed(() => competitionItems.value.filter(i => i.status !== 'closed'));
+                // Helper to get date range string
+                const getSelectedGroupDateRange = () => {
+                    const item = competitionItems.value.find(i => i.name === selectedCategory.value);
+                    if (!item || !item.startDate) return '';
+                    let range = formatDate(item.startDate);
+                    if (item.endDate) {
+                        range += ` - ${formatDate(item.endDate)}`;
+                    }
+                    return range;
+                };
+
+                const activeCompetitions = computed(() => competitionItems.value.filter(i => {
+                    // Logic for active competitions: status open AND date not passed
+                    if (i.status === 'closed') return false;
+                    if (i.endDate) {
+                        const today = new Date();
+                        today.setHours(0,0,0,0);
+                        const end = new Date(i.endDate);
+                        if (today > end) return false;
+                    }
+                    return true;
+                }));
 
                 const submitForm = async () => {
                     let allEntries = [];
@@ -1267,7 +1290,7 @@
                 };
 
                 const startBatchEdit = async () => {
-                    const pwd = await showDialog({ type: 'password', title: 'Admin', message: 'Password:', placeholder: '***', icon: 'fas fa-lock' });
+                    const pwd = await showDialog({ type: 'password', title: t('admin_title'), message: 'Password:', placeholder: '***', icon: 'fas fa-lock' });
                     if (pwd !== '888888') { if (pwd !== false) await showDialog({ title: 'Error', message: 'Wrong password' }); return; }
                     
                     // Show success modal then proceed
@@ -1505,12 +1528,17 @@
                 };
                 
                 const enterAdmin = async () => {
-                    if (isAdmin.value) { currentTab.value = 'admin'; selectedCategory.value = null; return; }
+                    if (isAdmin.value) { 
+                        // Already admin, go to backend directly
+                        currentTab.value = 'admin'; 
+                        selectedCategory.value = null; 
+                        return; 
+                    }
                     const pwd = await showDialog({ type: 'password', title: t('admin_title'), message: 'Password:', placeholder: t('ph_password'), icon: 'fas fa-lock', confirmText: t('btn_login') });
                     if (pwd === "123456") { 
                         isAdmin.value = true; 
-                        await showDialog({ title: t('toast_success'), message: '管理员模式已开启', showButtons: false, autoClose: 2000, icon: 'fas fa-check-circle' });
-                        // Do NOT switch tab
+                        await showDialog({ title: t('toast_success'), message: '管理员模式已开启', showButtons: false, autoClose: 1500, icon: 'fas fa-check-circle' });
+                        // Do NOT switch tab automatically to admin backend, stay on current page
                     }
                     else if (pwd !== false) showDialog({ title: 'Error', message: t('toast_fail') });
                 };
@@ -1541,7 +1569,7 @@
                         const classMap = {};
                         students.forEach(s => { const c = s.studentClass || '未分类'; if (!classMap[c]) classMap[c] = []; classMap[c].push(s); });
                         
-                        return { categoryName: catName, organizer: typeof catObj === 'object' ? (catObj.organizer || '') : '', status: catObj.status || 'open', totalCount: students.length, classes: Object.keys(classMap).sort().map(c => ({ className: c, students: classMap[c] })) };
+                        return { categoryName: catName, organizer: typeof catObj === 'object' ? (catObj.organizer || '') : '', status: catObj.status || 'open', startDate: catObj.startDate || '', endDate: catObj.endDate || '', totalCount: students.length, classes: Object.keys(classMap).sort().map(c => ({ className: c, students: classMap[c] })) };
                     }).filter(i => i !== null);
                 });
 
@@ -1600,11 +1628,11 @@
                 return {
                     currentTab, selectedCategory, isInitializing, isRefreshing, isSubmitting, initStatus, isAdmin, isBatchEditing,
                     competitionItems, availableClasses: computed(() => classList.value), availableStudents: computed(() => studentDB.value[form.value.stuClass] || []),
-                    form, searchQuery, keepClassInfo, adminNewItemName, adminNewItemOrg, batchEditData,
+                    form, searchQuery, keepClassInfo, adminNewItemName, adminNewItemOrg, adminNewItemStartDate, adminNewItemEndDate, batchEditData,
                     goHome: () => { currentTab.value = 'results'; selectedCategory.value = null; isBatchEditing.value = false; },
                     goToRegister: (cat) => { currentTab.value = 'register'; form.value.category = cat; },
                     exitCategory,
-                    groupedResults, getSelectedGroupCount, getSelectedGroupOrganizer, getSelectedGroupedByGrade, getCategoryIcon, getRankClass,
+                    groupedResults, getSelectedGroupCount, getSelectedGroupOrganizer, getSelectedGroupedByGrade, getCategoryIcon, getRankClass, getSelectedGroupDateRange, formatDate,
                     modalState, handleModalConfirm, handleModalCancel, modalInput, toastState,
                     scoreModal, openScoreModal, submitScore, 
                     printRoster, printScoringSheet, printResults, exportCSV, downloadPoster,
