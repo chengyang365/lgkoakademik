@@ -39,7 +39,7 @@
             animation: spin 1s linear infinite;
         }
         .loader-white { border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; }
-        @keyframes spin { 0 { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
         /* 移动端表格粘性头部 */
         .sticky-table-header { position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -67,28 +67,28 @@
 
     <script>
         // --- 1. 全局配置与状态 (State) ---
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7Xcjc2IaJ75-y_hmu4JcaZLiP0XDf0ai227ii3hr_B8RRQEX5QRnwV5iJdqlpiXs/exec"; 
-        const ADMIN_PWD = "123456";  
-        const SCORE_PWD = "888888";  
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzR8nuH_7_26D0EeuDeSnnSJ0dfSAsS052h9OBH_J_F8jOrGhnYVvK8PsRT1lREKdFK/exec"; 
+        // 🛡️ [安全升级]：明文密码常量已被移除，改由向后端发送校验请求
         
         const urlParams = new URLSearchParams(window.location.search);
         const isTestEnv = urlParams.get('test') === '1';
         const currentYear = new Date().getFullYear().toString();
 
-        // 🛡️ 声明全局定时器控制句柄，防止 ReferenceError 并保证安全垃圾回收
+        // 声明全局定时器控制句柄
         let autoRefreshTimer = null;
         let toastTimer = null;
         let modalAutoCloseTimer = null;
 
         const state = {
             lang: localStorage.getItem('app_lang') || 'zh',
-            currentTab: 'results', // 'results' | 'register' | 'admin'
+            currentTab: 'results', 
             selectedCategory: null,
-            activeFilter: 'ongoing', // 'all' | 'ongoing' | 'ended'
+            activeFilter: 'ongoing', 
             isInitializing: true,
             isRefreshing: false,
             isSubmitting: false,
             isAdmin: false,
+            adminPwd: '', // 🛡️ 临时储存在内存中的 Token，刷新即失效
             isBatchEditing: false,
             isOfflineMode: false,
             isGeneratingPoster: false,
@@ -102,9 +102,7 @@
             auditLog: JSON.parse(localStorage.getItem('localAuditLog') || '[]'),
             unsyncedQueue: JSON.parse(localStorage.getItem('unsyncedQueue') || '[]'),
             searchQuery: '',
-            initStatus: { items: false, students: false, results: false },
             
-            // 报名表单状态
             form: {
                 category: '',
                 isTeamBundle: false,
@@ -112,7 +110,6 @@
             },
             keepClassInfo: true,
             
-            // 弹窗状态
             modals: {
                 score: { visible: false, studentName: '', className: '', score: '', rank: '', category: '' },
                 editCategory: { visible: false, oldName: '', newName: '', organizer: '', startDate: '', endDate: '' },
@@ -138,7 +135,6 @@
                 status_live: "云端同步",
                 status_offline: "离线模式",
                 search_placeholder: "搜索比赛、班级或姓名...",
-                admin_mode_hint: "管理模式已开启。可编辑项目库。",
                 btn_exit_admin: "退出管理",
                 label_ongoing: "进行中",
                 label_registered: "已报",
@@ -203,7 +199,7 @@
                 modal_edit_title: "编辑比赛项目",
                 hint_edit_sync: "注意：修改比赛名称将会自动级联更新所有相关的报名记录。",
                 modal_score_title: "个人成绩录入",
-                ph_password: "请输入管理员密码", // 🛡️ 补齐并更新
+                ph_password: "请输入管理员密码",
                 status_ended: "已结束",
                 status_auto_ended: "已截止",
                 btn_end_comp: "结束比赛",
@@ -236,7 +232,6 @@
                 status_live: "Segerak",
                 status_offline: "Luar Talian",
                 search_placeholder: "Cari nama, kelas atau acara...",
-                admin_mode_hint: "Mod Admin aktif.",
                 btn_exit_admin: "Keluar Admin",
                 label_ongoing: "Berjalan",
                 label_registered: "Daftar",
@@ -301,7 +296,7 @@
                 modal_edit_title: "Ubah Acara",
                 hint_edit_sync: "Petua: Nama baru akan dikemaskini secara automatik.",
                 modal_score_title: "Input Markah",
-                ph_password: "Sila masukkan kata laluan pentadbir", // 🛡️ 优化
+                ph_password: "Sila masukkan kata laluan pentadbir",
                 status_ended: "Tamat",
                 status_auto_ended: "Tamat",
                 btn_end_comp: "Tamatkan",
@@ -317,8 +312,8 @@
                 label_start_date: "Tarikh Mula",
                 label_end_date: "Tarikh Tamat",
                 grade_1: "Tahun 1", grade_2: "Tahun 2", grade_3: "Tahun 3", grade_4: "Tahun 4", grade_5: "Tahun 5", grade_6: "Tahun 6",
-                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Tempat Ketiga", rank_4th: "Tempat Keempat", rank_5th: "Tempat Kelima",
-                rank_distinction: "Anugerah Cemerlang", rank_excellence: "Anugerah Kepujian", rank_consolation: "Hadiah Saguhati"
+                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Ketiga", rank_4th: "Keempat", rank_5th: "Kelima",
+                rank_distinction: "Cemerlang", rank_excellence: "Kepujian", rank_consolation: "Saguhati"
             },
             en: {
                 school_name_line1: "Intra-school Competition Management System",
@@ -334,7 +329,6 @@
                 status_live: "Live Sync",
                 status_offline: "Offline",
                 search_placeholder: "Search name, class...",
-                admin_mode_hint: "Admin mode active.",
                 btn_exit_admin: "Exit Admin",
                 label_ongoing: "Ongoing",
                 label_registered: "Reg",
@@ -399,7 +393,7 @@
                 modal_edit_title: "Edit Item",
                 hint_edit_sync: "Tip: Renaming updates all related records automatically.",
                 modal_score_title: "Score Entry",
-                ph_password: "Please enter admin password", // 🛡️ 优化
+                ph_password: "Please enter admin password",
                 status_ended: "Ended",
                 status_auto_ended: "Closed",
                 btn_end_comp: "End Game",
@@ -491,7 +485,6 @@
             return 1000;
         };
 
-        // 🛡️ 新增定义：项目状态计算判定函数，防止在渲染明细页时抛出 ReferenceError 错误
         const getCategoryStatus = (name) => {
             const item = state.competitionItems.find(i => i.name === name);
             if (!item) return 'closed';
@@ -608,14 +601,19 @@
         };
 
         // --- 5. 统一数据交互引擎 (Data Sync Network Engine) ---
-        const fetchWithRealCheck = async (url, payload, action, timeout = 6000) => {
+        // 🛡️ 核心通信层修改：接收 overridePwd，用于在请求管理动作时发送动态获取到的密码令牌
+        const fetchWithRealCheck = async (url, payload, action, timeout = 6000, overridePwd = null) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
-                    body: JSON.stringify({ action: action, auth_pwd: (action==='updateScore'?SCORE_PWD:ADMIN_PWD), ...payload }),
+                    body: JSON.stringify({ 
+                        action: action, 
+                        auth_pwd: overridePwd !== null ? overridePwd : state.adminPwd, 
+                        ...payload 
+                    }),
                     signal: controller.signal
                 });
                 clearTimeout(id);
@@ -683,7 +681,6 @@
                 if(!state.isOfflineMode) {
                     state.competitionItems = Array.isArray(items) ? items.map(i => typeof i === 'string' ? {name: i, organizer: '', status: 'open', startDate: '', endDate: ''} : i) : [];
                 }
-                state.initStatus.items = true;
 
                 const rawStudents = await fetchAPI('getStudents');
                 const db = {};
@@ -697,13 +694,11 @@
                     state.studentDB = db;
                     state.classList = Object.keys(state.studentDB).sort();
                 }
-                state.initStatus.students = true;
 
                 const rawResults = await fetchAPI('getResults');
                 if(!state.isOfflineMode) {
                     let serverResults = normalizeData(rawResults).map((item, i) => ({ ...item, rowIndex: i }));
 
-                    // 🛡️ 本地黑匣子覆盖服务器数据，防止刷新丢新录入的分数
                     if (state.unsyncedQueue.length > 0) {
                         state.unsyncedQueue.forEach(pending => {
                             if (pending.action === 'SCORE' || pending.action === 'updateScore') {
@@ -724,7 +719,6 @@
                     }
                     state.dbResults = serverResults;
                 }
-                state.initStatus.results = true;
             } catch (e) {
                 if (!isBackground) {
                    state.competitionItems = initItemsFromStorage();
@@ -792,11 +786,11 @@
             state.currentTab = 'register';
             state.form.category = cat;
             state.form.isTeamBundle = false;
-            // 默认添加一组报名数据
             state.form.groups = [{ id: Date.now(), class: '', teamName: '', students: [''] }];
             updateDOM();
         };
 
+        // 🛡️ [安全升级] 向后端动态发送效验请求以获取准入凭证
         const enterAdmin = async () => {
             if (state.isAdmin) {
                 state.currentTab = 'admin';
@@ -805,14 +799,23 @@
                 return;
             }
             const pwd = await showDialog({ type: 'password', title: t('admin_title'), message: t('ph_password'), placeholder: '***', icon: 'fas fa-lock text-indigo-500', confirmText: t('btn_login') });
-            if (pwd === ADMIN_PWD) { 
-                state.isAdmin = true; 
-                await showDialog({ title: '登录成功', message: '管理模式已开启', showButtons: false, autoClose: 1000, icon: 'fas fa-check-circle text-emerald-500' });
-                state.currentTab = 'admin';
+            
+            if (pwd !== false && pwd !== '') { 
+                state.isSubmitting = true;
                 updateDOM();
-            }
-            else if (pwd !== false) {
-                showDialog({ title: '错误', message: '授权验证失败，密码错误！', icon: 'fas fa-times-circle text-rose-500' });
+                try {
+                    // 向服务端发起 verifyPassword 操作以校验密码是否正确
+                    await fetchWithRealCheck(GOOGLE_SCRIPT_URL, {}, 'verifyPassword', 6000, pwd);
+                    state.isAdmin = true; 
+                    state.adminPwd = pwd; // 保存密码凭证于单次会话内存中
+                    await showDialog({ title: '登录成功', message: '管理模式已开启', showButtons: false, autoClose: 1000, icon: 'fas fa-check-circle text-emerald-500' });
+                    state.currentTab = 'admin';
+                } catch(e) {
+                    showDialog({ title: '错误', message: '授权验证失败，密码错误或网络异常！', icon: 'fas fa-times-circle text-rose-500' });
+                } finally {
+                    state.isSubmitting = false;
+                    updateDOM();
+                }
             }
         };
 
@@ -831,7 +834,6 @@
             updateDOM();
         };
 
-        // 🛡️ 补全 changeYear 与 changeFilter 核心过滤触发函数，防止其抛出 ReferenceError 错误
         const changeYear = (e) => {
             state.selectedYear = e.target.value;
             localStorage.setItem('app_selected_year', state.selectedYear);
@@ -850,7 +852,6 @@
 
         // --- 批量评分与时光回溯 (Batch Edit with Snapshot Undo) ---
         const startBatchEdit = async () => {
-            // 🛡️ 移除权限验证，使普通用户能直接使用批量打分功能
             state.batchEditData = JSON.parse(JSON.stringify(getSelectedGroupedByGrade()));
             state.historySnapshot = null;
             state.isBatchEditing = true;
@@ -1069,7 +1070,7 @@
 
         const changeRegClass = (gIndex, value) => {
             state.form.groups[gIndex].class = value;
-            state.form.groups[gIndex].students = ['']; // 重置学生
+            state.form.groups[gIndex].students = ['']; 
             updateDOM();
         };
 
@@ -1212,7 +1213,6 @@
 
         const submitScore = async () => {
             const modal = state.modals.score;
-            // 🛡️ 移除原有评分密码校验
             state.isSubmitting = true;
             updateDOM();
             try {
@@ -1262,6 +1262,8 @@
         };
 
         // --- 9. 项目管理与后台管理 (Admin Control Actions) ---
+        // 🛡️ [安全升级] 以下敏感动作均使用 fetchWithRealCheck 并带上 state.adminPwd 进行双重验证
+        
         const openEditCategory = (itemJSON) => {
             const item = JSON.parse(decodeURIComponent(itemJSON));
             state.modals.editCategory = {
@@ -1281,22 +1283,28 @@
             state.isSubmitting = true;
             updateDOM();
             try {
-                await fetchAPI('editCompetition', { oldName, newName: newName.trim(), organizer: organizer.trim(), startDate, endDate });
+                await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { oldName, newName: newName.trim(), organizer: organizer.trim(), startDate, endDate }, 'editCompetition');
                 state.modals.editCategory.visible = false;
                 if (state.selectedCategory === oldName) state.selectedCategory = newName.trim();
                 await fetchAllData(); 
                 showToast(t('toast_success'));
-            } catch(e) { console.error(e); } finally { state.isSubmitting = false; updateDOM(); }
+            } catch(e) { 
+                console.error(e); 
+                showDialog({ title: '错误', message: '编辑失败，可能由于密码效验过期，请尝试重新验证。', icon: 'fas fa-exclamation-triangle text-rose-500' });
+            } finally { state.isSubmitting = false; updateDOM(); }
         };
 
         const toggleStatus = async (itemName) => {
             state.isSubmitting = true;
             updateDOM();
             try {
-                await fetchAPI('toggleStatus', { name: itemName });
+                await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { name: itemName }, 'toggleStatus');
                 showToast(t('toast_success'));
                 await fetchAllData();
-            } catch(e) { console.error(e); } finally { state.isSubmitting = false; updateDOM(); }
+            } catch(e) { 
+                console.error(e); 
+                showDialog({ title: '拒绝', message: '无权操作此项目状态', icon: 'fas fa-times-circle text-rose-500' });
+            } finally { state.isSubmitting = false; updateDOM(); }
         };
 
         const adminAddItem = async (e) => {
@@ -1310,10 +1318,13 @@
             state.isSubmitting = true;
             updateDOM();
             try {
-                await fetchAPI('addCompetition', { name, organizer, startDate, endDate });
+                await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { name, organizer, startDate, endDate }, 'addCompetition');
                 showToast(t('toast_success'));
                 await fetchAllData();
-            } catch(e) { console.error(e); } finally { state.isSubmitting = false; updateDOM(); }
+            } catch(e) { 
+                console.error(e); 
+                showDialog({ title: '创建失败', message: '可能是服务器阻断或密码凭证过期，请重试。', icon: 'fas fa-times-circle text-rose-500' });
+            } finally { state.isSubmitting = false; updateDOM(); }
         };
 
         const adminDeleteItem = async (name) => {
@@ -1321,10 +1332,13 @@
             state.isSubmitting = true;
             updateDOM();
             try {
-                await fetchAPI('deleteCompetition', { name });
+                await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { name }, 'deleteCompetition');
                 showToast(t('toast_success'));
                 await fetchAllData();
-            } catch(e) { console.error(e); } finally { state.isSubmitting = false; updateDOM(); }
+            } catch(e) { 
+                console.error(e); 
+                showDialog({ title: '删除拒绝', message: '无权限进行此破坏性操作', icon: 'fas fa-ban text-rose-500' });
+            } finally { state.isSubmitting = false; updateDOM(); }
         };
 
         // --- 10. 报表打印与海报生成 (Report Printing & Poster Canvas) ---
@@ -1572,7 +1586,6 @@
             }
         };
 
-        // 🛡️ 新增定义：本地历史项目加载器函数，防止在 fetchAllData 回退渲染时抛出 ReferenceError 错误
         const initItemsFromStorage = () => {
             const stored = localStorage.getItem('school_comp_items_v2');
             if (stored) {
@@ -1706,7 +1719,6 @@
             }
 
             // 大厅主页面
-            // 🛡️ 移除“年”字过滤后缀，保持纯数字年份
             const yearsOptions = getAvailableYears().map(y => `<option value="${y}" ${state.selectedYear === y ? 'selected' : ''}>${y}</option>`).join('');
             
             return `
@@ -2000,7 +2012,6 @@
                             ${stu.rank ? `<span class="${getRankClass(stu.rank)} text-xs px-2.5 py-0.5 rounded-md font-bold shadow-sm whitespace-nowrap">${t_rank(stu.rank)}</span>` : ''}
                             ${(!stu.rank && stu.score) ? `<span class="text-slate-600 font-mono text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold">${stu.score}分</span>` : ''}
                             
-                            <!-- 🛡️ 移除原有 state.isAdmin 校验，让单项编辑和单项删除随时可访问 -->
                             <button onclick="app.deleteRegistration('${stu.studentName}', '${cls.className}')" class="text-slate-400 hover:text-rose-500 p-1.5 transition sm:opacity-0 group-hover:opacity-100 no-print" title="删除"><i class="fas fa-trash-alt"></i></button>
                             <button onclick="app.openScoreModal('${stu.studentName}', '${cls.className}', '${stu.score || ''}', '${stu.rank || ''}')" class="text-slate-400 hover:text-indigo-600 p-1.5 transition sm:opacity-0 group-hover:opacity-100 no-print" title="打分"><i class="fas fa-pencil-alt"></i></button>
                         </div>
