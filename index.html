@@ -68,13 +68,11 @@
     <script>
         // --- 1. 全局配置与状态 (State) ---
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzR8nuH_7_26D0EeuDeSnnSJ0dfSAsS052h9OBH_J_F8jOrGhnYVvK8PsRT1lREKdFK/exec"; 
-        // 🛡️ [安全升级]：明文密码常量已被移除，改由向后端发送校验请求
         
         const urlParams = new URLSearchParams(window.location.search);
         const isTestEnv = urlParams.get('test') === '1';
         const currentYear = new Date().getFullYear().toString();
 
-        // 声明全局定时器控制句柄
         let autoRefreshTimer = null;
         let toastTimer = null;
         let modalAutoCloseTimer = null;
@@ -88,7 +86,7 @@
             isRefreshing: false,
             isSubmitting: false,
             isAdmin: false,
-            adminPwd: '', // 🛡️ 临时储存在内存中的 Token，刷新即失效
+            adminPwd: '',
             isBatchEditing: false,
             isOfflineMode: false,
             isGeneratingPoster: false,
@@ -601,8 +599,8 @@
         };
 
         // --- 5. 统一数据交互引擎 (Data Sync Network Engine) ---
-        // 🛡️ 核心通信层修改：接收 overridePwd，用于在请求管理动作时发送动态获取到的密码令牌
-        const fetchWithRealCheck = async (url, payload, action, timeout = 6000, overridePwd = null) => {
+        // 🛡️ 核心修复：确保数据结构发送顺序绝对正确，防止后端误读覆盖指令
+        const fetchWithRealCheck = async (url, payload, action, timeout = 15000, overridePwd = null) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
@@ -610,10 +608,11 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
                     body: JSON.stringify({ 
-                        action: action, 
-                        auth_pwd: overridePwd !== null ? overridePwd : state.adminPwd, 
-                        ...payload 
+                        ...payload,     // 🛡️ 顺序修复：先解构 payload
+                        action: action, // 🛡️ 后赋 action，确保绝对的命令优先级覆盖
+                        auth_pwd: overridePwd !== null ? overridePwd : state.adminPwd 
                     }),
+                    redirect: 'follow',
                     signal: controller.signal
                 });
                 clearTimeout(id);
@@ -656,7 +655,13 @@
             if (state.isOfflineMode) return await mockAPI(action);
             try {
                 if (payload) { 
-                    return await fetchWithRetry(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
+                    const response = await fetchWithRetry(GOOGLE_SCRIPT_URL, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
+                        body: JSON.stringify({ ...payload, action: action }), // 🛡️ 修复并统一 payload 排序规则
+                        redirect: 'follow' // 🛡️ 取消 mode: no-cors，使后端报错也能明确接管
+                    });
+                    return await response.json();
                 } else { 
                     const response = await fetchWithRetry(`${GOOGLE_SCRIPT_URL}?action=${action}&_t=${new Date().getTime()}&year=${state.selectedYear}`, { method: 'GET', redirect: 'follow' });
                     return await response.json();
@@ -790,7 +795,6 @@
             updateDOM();
         };
 
-        // 🛡️ [安全升级] 向后端动态发送效验请求以获取准入凭证
         const enterAdmin = async () => {
             if (state.isAdmin) {
                 state.currentTab = 'admin';
@@ -804,10 +808,9 @@
                 state.isSubmitting = true;
                 updateDOM();
                 try {
-                    // 向服务端发起 verifyPassword 操作以校验密码是否正确
                     await fetchWithRealCheck(GOOGLE_SCRIPT_URL, {}, 'verifyPassword', 6000, pwd);
                     state.isAdmin = true; 
-                    state.adminPwd = pwd; // 保存密码凭证于单次会话内存中
+                    state.adminPwd = pwd; 
                     await showDialog({ title: '登录成功', message: '管理模式已开启', showButtons: false, autoClose: 1000, icon: 'fas fa-check-circle text-emerald-500' });
                     state.currentTab = 'admin';
                 } catch(e) {
@@ -1262,8 +1265,6 @@
         };
 
         // --- 9. 项目管理与后台管理 (Admin Control Actions) ---
-        // 🛡️ [安全升级] 以下敏感动作均使用 fetchWithRealCheck 并带上 state.adminPwd 进行双重验证
-        
         const openEditCategory = (itemJSON) => {
             const item = JSON.parse(decodeURIComponent(itemJSON));
             state.modals.editCategory = {
