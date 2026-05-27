@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>新廊华小校内竞赛管理系统</title>
     
+    <!-- PWA 配置支持 -->
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="竞赛系统">
     <link type="image/png" rel="icon" sizes="32x32" href="https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png">
     <link rel="apple-touch-icon" href="https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png">
@@ -41,7 +42,7 @@
         .loader-white { border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* 移动端表格粘性头部 */
+        /* 移动端表格粘性头部与防穿模加固 */
         .sticky-table-header { position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .sticky-col-left { position: sticky; left: 0; z-index: 10; background-color: inherit; }
         .sticky-col-left-header { z-index: 30; }
@@ -61,7 +62,7 @@
 </head>
 <body class="bg-slate-50 text-slate-800">
 
-    <div id="app" class="min-h-screen flex flex-col relative">
+    <div id="app" class="min-h-screen flex flex-col relative w-full overflow-x-hidden">
         <!-- DOM 渲染将由 JavaScript 完全接管 -->
     </div>
 
@@ -101,13 +102,10 @@
             unsyncedQueue: JSON.parse(localStorage.getItem('unsyncedQueue') || '[]'),
             searchQuery: '',
             
-            form: {
-                category: '',
-                isTeamBundle: false,
-                groups: [] 
-            },
-            keepClassInfo: true,
+            form: { category: '', isTeamBundle: false, groups: [] },
+            keepClassInfo: false,
             
+            adminForm: { name: '', organizer: '', startDate: '', endDate: '' },
             modals: {
                 score: { visible: false, studentName: '', className: '', score: '', rank: '', category: '' },
                 editCategory: { visible: false, oldName: '', newName: '', organizer: '', startDate: '', endDate: '' },
@@ -217,7 +215,7 @@
                 rank_distinction: "特优奖", rank_excellence: "优秀奖", rank_consolation: "安慰奖"
             },
             ms: {
-                school_name_line1: "Sistem Pengurusan Pertandingan Peringkat Sekolah",
+                school_name_line1: "Sistem Pengurusan Pertandingan Sekolah",
                 school_name_line2: "SJK (C) Ladang Grisek",
                 school_header_print: "SJK (C) Ladang Grisek",
                 system_subtitle: "Awan Masa Nyata",
@@ -314,7 +312,7 @@
                 rank_distinction: "Cemerlang", rank_excellence: "Kepujian", rank_consolation: "Saguhati"
             },
             en: {
-                school_name_line1: "Intra-school Competition Management System",
+                school_name_line1: "Intra-school Competition Management",
                 school_name_line2: "SJK (C) Ladang Grisek",
                 school_header_print: "SJK (C) Ladang Grisek",
                 system_subtitle: "Cloud Real-time",
@@ -494,6 +492,8 @@
             }
             return 'open';
         };
+        
+        const getStudentsByClass = (className) => state.studentDB[className] || [];
 
         // --- 4. 数据一致性衍生状态机 (Computed Properties) ---
         const getAvailableYears = () => {
@@ -599,8 +599,7 @@
         };
 
         // --- 5. 统一数据交互引擎 (Data Sync Network Engine) ---
-        // 🛡️ 核心修复：确保数据结构发送顺序绝对正确，防止后端误读覆盖指令
-        const fetchWithRealCheck = async (url, payload, action, timeout = 15000, overridePwd = null) => {
+        const fetchWithRealCheck = async (url, payload, action, timeout = 30000, overridePwd = null) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
@@ -608,8 +607,8 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
                     body: JSON.stringify({ 
-                        ...payload,     // 🛡️ 顺序修复：先解构 payload
-                        action: action, // 🛡️ 后赋 action，确保绝对的命令优先级覆盖
+                        ...payload,
+                        action: action,
                         auth_pwd: overridePwd !== null ? overridePwd : state.adminPwd 
                     }),
                     redirect: 'follow',
@@ -622,6 +621,9 @@
                 return result;
             } catch (error) {
                 clearTimeout(id);
+                if (error.name === 'AbortError' || (error.message && error.message.includes('aborted'))) {
+                    throw new Error('Request Timeout (Google Apps Script 冷启动超时)');
+                }
                 throw error;
             }
         };
@@ -658,8 +660,8 @@
                     const response = await fetchWithRetry(GOOGLE_SCRIPT_URL, { 
                         method: 'POST', 
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
-                        body: JSON.stringify({ ...payload, action: action }), // 🛡️ 修复并统一 payload 排序规则
-                        redirect: 'follow' // 🛡️ 取消 mode: no-cors，使后端报错也能明确接管
+                        body: JSON.stringify({ ...payload, action: action }),
+                        redirect: 'follow'
                     });
                     return await response.json();
                 } else { 
@@ -732,7 +734,6 @@
                 state.isInitializing = false;
                 state.isRefreshing = false;
                 
-                // 将数据存入本地缓存
                 localStorage.setItem('school_comp_items_v2', JSON.stringify(state.competitionItems));
                 localStorage.setItem('school_comp_students_v2', JSON.stringify(state.studentDB));
                 localStorage.setItem('school_comp_results_v2', JSON.stringify(state.dbResults));
@@ -808,13 +809,13 @@
                 state.isSubmitting = true;
                 updateDOM();
                 try {
-                    await fetchWithRealCheck(GOOGLE_SCRIPT_URL, {}, 'verifyPassword', 6000, pwd);
+                    await fetchWithRealCheck(GOOGLE_SCRIPT_URL, {}, 'verifyPassword', 15000, pwd);
                     state.isAdmin = true; 
                     state.adminPwd = pwd; 
                     await showDialog({ title: '登录成功', message: '管理模式已开启', showButtons: false, autoClose: 1000, icon: 'fas fa-check-circle text-emerald-500' });
                     state.currentTab = 'admin';
                 } catch(e) {
-                    showDialog({ title: '错误', message: '授权验证失败，密码错误或网络异常！', icon: 'fas fa-times-circle text-rose-500' });
+                    showDialog({ title: '错误', message: '授权验证失败，密码错误或网络超时！', icon: 'fas fa-times-circle text-rose-500' });
                 } finally {
                     state.isSubmitting = false;
                     updateDOM();
@@ -1077,6 +1078,10 @@
             updateDOM();
         };
 
+        const updateStudentSelection = (gIndex, sIndex, value) => {
+            state.form.groups[gIndex].students[sIndex] = value;
+        };
+
         const toggleTeamBundle = (checked) => {
             state.form.isTeamBundle = checked;
             updateDOM();
@@ -1310,10 +1315,10 @@
 
         const adminAddItem = async (e) => {
             e.preventDefault();
-            const name = document.getElementById('new-item-name').value.trim();
-            const organizer = document.getElementById('new-item-org').value.trim();
-            const startDate = document.getElementById('new-item-start').value;
-            const endDate = document.getElementById('new-item-end').value;
+            const name = state.adminForm.name.trim();
+            const organizer = state.adminForm.organizer.trim();
+            const startDate = state.adminForm.startDate;
+            const endDate = state.adminForm.endDate;
             if (!name) return showDialog({ title: '提示', message: '请填写比赛项目名称。' });
             
             state.isSubmitting = true;
@@ -1321,6 +1326,7 @@
             try {
                 await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { name, organizer, startDate, endDate }, 'addCompetition');
                 showToast(t('toast_success'));
+                state.adminForm = { name: '', organizer: '', startDate: '', endDate: '' };
                 await fetchAllData();
             } catch(e) { 
                 console.error(e); 
@@ -1517,6 +1523,23 @@
         };
 
         // --- 11. 自定义通用弹窗驱动 (Dialog Manager) ---
+        const handleModalCancel = () => {
+            if (modalAutoCloseTimer) clearTimeout(modalAutoCloseTimer);
+            state.modals.dialog.resolve(false); 
+            state.modals.dialog.visible = false; 
+            updateDOM();
+        };
+        
+        const showToast = (message, type = 'success') => {
+            state.toast = { visible: true, message, type };
+            updateDOM();
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                state.toast.visible = false;
+                updateDOM();
+            }, 3000);
+        };
+
         const showDialog = (opts) => new Promise(resolve => { 
             if (modalAutoCloseTimer) clearTimeout(modalAutoCloseTimer);
             state.modals.dialog = { 
@@ -1559,13 +1582,6 @@
             updateDOM();
         };
 
-        const handleModalCancel = () => {
-            if (modalAutoCloseTimer) clearTimeout(modalAutoCloseTimer);
-            state.modals.dialog.resolve(false); 
-            state.modals.dialog.visible = false; 
-            updateDOM();
-        };
-
         // --- 12. PWA 机制初始化与自愈 (Self-Healing Cache & PWA) ---
         const initLocalCache = () => {
             try {
@@ -1595,8 +1611,12 @@
             return [];
         };
 
+        // 🛡️ [修复]: 已移除旧版的 Blob ServiceWorker 注册逻辑，因现代浏览器默认阻断该协议
+        // 该单文件系统仍依靠 LocalStorage 实现防丢离线缓存
         const initPWA = () => {
             if (typeof window === 'undefined') return;
+            
+            // 1. 动态生成并注入 PWA 必要的 Web App Manifest
             const manifest = {
                 name: "新廊华小竞赛系统",
                 short_name: "华小竞赛",
@@ -1604,12 +1624,16 @@
                 display: "standalone",
                 background_color: "#f8fafc",
                 theme_color: "#4f46e5",
-                icons: [{ src: "https://api.iconify.design/fxemoji/trophy.png", sizes: "512x512", type: "image/png" }]
+                icons: [{ src: "https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png", sizes: "192x192", type: "image/png" }]
             };
             const link = document.createElement('link');
             link.rel = 'manifest';
             link.href = `data:application/manifest+json;charset=utf-8,${encodeURIComponent(JSON.stringify(manifest))}`;
             document.head.appendChild(link);
+
+            if ('serviceWorker' in navigator) {
+                console.log('💡 提示: 单文件版本已启用 LocalStorage 离线缓冲。如需系统级别的离线 PWA 安装，需配合独立的 sw.js 服务器文件。');
+            }
         };
 
         const normalizeData = (rawData) => {
@@ -1872,7 +1896,6 @@
 
                         ${!state.isBatchEditing && hasData ? `
                             <div class="flex flex-wrap justify-end gap-2 sm:gap-3">
-                                <!-- 🛡️ 批量打分与生成海报向所有用户无门槛开放 -->
                                 <button onclick="app.startBatchEdit()" class="bg-white border border-indigo-300 text-indigo-600 hover:bg-indigo-50 px-3 sm:px-4 py-2 rounded-xl font-bold shadow-sm text-xs sm:text-sm flex items-center transition">
                                     <i class="fas fa-pencil-alt mr-1 sm:mr-2"></i> ${t('btn_batch_entry')}
                                 </button>
@@ -1906,7 +1929,7 @@
 
         const renderEmptyCategoryState = () => {
             return `
-                <div class="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 no-print shadow-sm">
+                <div class="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 no-print shadow-sm mx-4 sm:mx-0">
                     <p class="text-slate-500 mb-5 font-medium">${t('msg_no_records')}</p>
                     <button onclick="app.goToRegister('${state.selectedCategory}')" ${getCategoryStatus(state.selectedCategory) !== 'open' ? 'disabled' : ''} class="${getCategoryStatus(state.selectedCategory) !== 'open' ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-md'} text-white px-8 py-2.5 rounded-full font-bold transition">${t('btn_go_register')}</button>
                 </div>
@@ -1953,7 +1976,6 @@
                 </div>
             ` : '';
 
-            // 🛡️ 本地操作防丢黑匣子
             const auditLogBar = !state.isBatchEditing ? `
                 <div class="bg-slate-100 border border-slate-200 rounded-3xl p-6 shadow-inner mt-12 no-print">
                     <h3 class="text-sm font-bold text-slate-600 mb-4 flex items-center justify-between border-b border-slate-200 pb-3">
@@ -2048,8 +2070,9 @@
                     `).join('');
 
                     tableRows += `
-                        <tr class="hover:bg-indigo-50/50 transition">
-                            <td class="p-3.5 font-mono text-slate-500 text-sm font-bold sticky-col-left shadow-[2px_0_4px_-1px_rgba(0,0,0,0.05)]">${cls.className}</td>
+                        <tr class="bg-white hover:bg-indigo-50 transition border-b border-slate-50 last:border-0">
+                            <!-- 🛡️ 添加 bg-inherit / bg-white 防止左侧粘性头部滑动穿模 -->
+                            <td class="p-3.5 font-mono text-slate-500 text-sm font-bold sticky-col-left shadow-[2px_0_4px_-1px_rgba(0,0,0,0.05)] bg-inherit">${cls.className}</td>
                             <td class="p-3.5 font-medium text-slate-800 text-sm break-words">${formatName(stu.studentName)}</td>
                             <td class="p-2.5">
                                 <input type="number" step="0.1" inputmode="decimal" 
@@ -2057,13 +2080,13 @@
                                     value="${stu.score || ''}" 
                                     oninput="app.syncTeamScore('${stu.rowIndex}')" 
                                     onkeyup="if(event.key==='Enter') app.focusNextBatchInput(event)" 
-                                    class="batch-score-input w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono font-bold text-indigo-700 bg-white shadow-inner transition" 
+                                    class="batch-score-input w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono font-bold text-indigo-700 bg-white shadow-inner transition" 
                                     placeholder="-">
                             </td>
                             <td class="p-2.5">
                                 <select id="batch-rank-${stu.rowIndex}" 
                                     onchange="app.syncTeamRank('${stu.rowIndex}')" 
-                                    class="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-700 font-medium transition">
+                                    class="w-full border border-slate-300 rounded-lg px-2 py-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-700 font-medium transition">
                                     <option value="">- 无名次 -</option>
                                     ${selectOptions}
                                 </select>
@@ -2075,13 +2098,13 @@
 
             return `
                 <div class="bg-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse min-w-[500px]">
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left border-collapse min-w-[600px]">
                             <thead class="bg-indigo-50 text-indigo-800 text-xs uppercase font-bold tracking-wider sticky-table-header">
                                 <tr>
                                     <th class="p-3.5 border-b border-indigo-100 w-20 sticky-col-left sticky-col-left-header bg-indigo-50">${t('th_class')}</th>
-                                    <th class="p-3.5 border-b border-indigo-100">${t('th_name')}</th>
-                                    <th class="p-3.5 border-b border-indigo-100 w-28 text-center bg-indigo-100/30">${t('th_score')}</th>
+                                    <th class="p-3.5 border-b border-indigo-100 w-48">${t('th_name')}</th>
+                                    <th class="p-3.5 border-b border-indigo-100 w-32 text-center bg-indigo-100/30">${t('th_score')}</th>
                                     <th class="p-3.5 border-b border-indigo-100 w-40">${t('th_rank')}</th>
                                 </tr>
                             </thead>
@@ -2106,15 +2129,15 @@
 
             const classGroupsHTML = state.form.groups.map((group, gIndex) => {
                 const studentsOptions = group.class ? getStudentsByClass(group.class).map(stu => `
-                    <option value="${stu}">${formatName(stu, true)}</option>
+                    <option value="${stu}" ${group.students.includes(stu) ? 'selected' : ''}>${formatName(stu, true)}</option>
                 `).join('') : '';
 
                 const studentRows = group.students.map((stu, sIndex) => `
                     <div class="flex gap-2 items-center">
                         <div class="relative flex-grow">
                             <span class="absolute left-3 top-3.5 text-xs font-bold text-slate-400">${sIndex + 1}.</span>
-                            <select onchange="state.form.groups[${gIndex}].students[${sIndex}] = this.value; app.refreshData(true);" required class="w-full rounded-xl border border-emerald-200 pl-8 p-2.5 bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 transition shadow-sm">
-                                <option value="">${t('opt_empty')}</option>
+                            <select onchange="app.updateStudentSelection(${gIndex}, ${sIndex}, this.value)" required class="w-full rounded-xl border border-emerald-200 pl-8 p-2.5 bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 transition shadow-sm">
+                                <option value="" ${!stu ? 'selected' : ''}>${t('opt_empty')}</option>
                                 ${studentsOptions}
                             </select>
                         </div>
@@ -2240,15 +2263,15 @@
             const listHTML = state.competitionItems.map(item => {
                 const encItem = encodeURIComponent(JSON.stringify(item));
                 return `
-                    <li class="flex justify-between items-center p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition">
-                        <div class="flex items-center">
+                    <li class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition gap-4 sm:gap-0">
+                        <div class="flex items-center w-full sm:w-auto">
                             <button onclick="app.toggleStatus('${item.name}')" class="mr-4 text-2xl transition-transform active:scale-90 focus:outline-none">
                                 <i class="fas ${item.status === 'closed' ? 'fa-play-circle text-emerald-500' : 'fa-pause-circle text-slate-300 hover:text-slate-400'}"></i>
                             </button>
-                            <div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center mr-3">
+                            <div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center mr-3 flex-shrink-0">
                                 <i class="${getCategoryIcon(item.name)} text-indigo-500 text-lg"></i>
                             </div>
-                            <div class="flex flex-col">
+                            <div class="flex flex-col flex-grow">
                                 <span class="font-bold text-slate-800 font-kai text-lg leading-tight ${item.status === 'closed' ? 'line-through text-slate-400' : ''}">${item.name}</span>
                                 <div class="flex flex-wrap gap-2 text-xs text-slate-400 mt-1 font-medium">
                                      ${item.organizer ? `<span class="bg-slate-100 px-1.5 rounded"><i class="fas fa-building mr-1"></i>${item.organizer}</span>` : ''}
@@ -2256,9 +2279,9 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="flex gap-1 sm:gap-2">
-                            <button onclick="app.openEditCategory('${encItem}')" class="text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 p-2 rounded-lg transition"><i class="fas fa-edit"></i></button>
-                            <button onclick="app.adminDeleteItem('${item.name}')" class="text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 p-2 rounded-lg transition"><i class="fas fa-trash-alt"></i></button>
+                        <div class="flex gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0 mt-2 sm:mt-0">
+                            <button onclick="app.openEditCategory('${encItem}')" class="text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 px-4 py-2 sm:p-2 rounded-lg transition font-bold text-sm sm:text-base flex-1 sm:flex-none"><i class="fas fa-edit sm:mr-0 mr-1"></i> <span class="sm:hidden">编辑</span></button>
+                            <button onclick="app.adminDeleteItem('${item.name}')" class="text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-4 py-2 sm:p-2 rounded-lg transition font-bold text-sm sm:text-base flex-1 sm:flex-none"><i class="fas fa-trash-alt sm:mr-0 mr-1"></i> <span class="sm:hidden">删除</span></button>
                         </div>
                     </li>
                 `;
@@ -2266,30 +2289,30 @@
 
             return `
                 <div class="max-w-2xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200 no-print">
-                    <div class="bg-slate-800 text-white p-6 flex justify-between items-center">
-                        <h2 class="text-xl font-bold font-kai"><i class="fas fa-cogs text-indigo-400 mr-2"></i>${t('admin_title')}</h2>
+                    <div class="bg-slate-800 text-white p-5 sm:p-6 flex justify-between items-center">
+                        <h2 class="text-lg sm:text-xl font-bold font-kai"><i class="fas fa-cogs text-indigo-400 mr-2"></i>${t('admin_title')}</h2>
                         <button onclick="app.goHome()" class="p-2 -mr-2 text-slate-400 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                     </div>
-                    <div class="p-6 sm:p-8">
-                        <div class="mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="p-5 sm:p-8">
+                        <div class="mb-8 bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <label class="block text-sm font-bold text-slate-700 mb-3">${t('label_add_item')}</label>
                             <form onsubmit="app.adminAddItem(event)" class="flex flex-col gap-3">
-                                <input type="text" id="new-item-name" placeholder="${t('ph_item_name')}" class="w-full border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 font-bold text-slate-800 transition">
+                                <input type="text" id="new-item-name" oninput="state.adminForm.name=this.value" value="${state.adminForm.name}" placeholder="${t('ph_item_name')}" class="w-full border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 font-bold text-slate-800 transition">
                                 <div class="flex flex-col sm:flex-row gap-3">
-                                    <input type="text" id="new-item-org" placeholder="${t('ph_organizer')}" class="flex-grow border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 text-sm font-medium transition">
-                                    <div class="flex gap-2">
-                                        <input type="date" id="new-item-start" class="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 text-sm text-slate-600 flex-1 transition">
-                                        <input type="date" id="new-item-end" class="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 text-sm text-slate-600 flex-1 transition">
+                                    <input type="text" id="new-item-org" oninput="state.adminForm.organizer=this.value" value="${state.adminForm.organizer}" placeholder="${t('ph_organizer')}" class="flex-grow border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm font-medium transition">
+                                    <div class="flex gap-2 w-full">
+                                        <input type="date" id="new-item-start" oninput="state.adminForm.startDate=this.value" value="${state.adminForm.startDate}" class="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm text-slate-600 flex-1 transition w-1/2">
+                                        <input type="date" id="new-item-end" oninput="state.adminForm.endDate=this.value" value="${state.adminForm.endDate}" class="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm text-slate-600 flex-1 transition w-1/2">
                                     </div>
-                                    <button type="submit" ${state.isSubmitting ? 'disabled' : ''} class="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap shadow-md active:scale-95 transition">
-                                        ${state.isSubmitting ? '<i class="fas fa-spinner fa-spin mr-1"></i>' : ''} ${t('btn_add')}
-                                    </button>
                                 </div>
+                                <button type="submit" ${state.isSubmitting ? 'disabled' : ''} class="w-full sm:w-auto bg-indigo-600 text-white px-6 py-3 sm:py-2.5 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap shadow-md active:scale-95 transition mt-2 sm:mt-0">
+                                    ${state.isSubmitting ? '<i class="fas fa-spinner fa-spin mr-1"></i>' : ''} ${t('btn_add')}
+                                </button>
                             </form>
                         </div>
                         <div>
-                            <h3 class="font-bold text-slate-700 mb-4">${t('label_cloud_list')} (${state.competitionItems.length})</h3>
-                            <ul class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                            <h3 class="font-bold text-slate-700 mb-4 flex justify-between items-end">${t('label_cloud_list')} <span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-xs">${state.competitionItems.length}</span></h3>
+                            <ul class="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                 ${listHTML}
                             </ul>
                         </div>
@@ -2315,13 +2338,13 @@
             const opts = rankOptions.map(r => `<option value="${r}" ${m.rank === r ? 'selected' : ''}>${t_rank(r)}</option>`).join('');
 
             return `
-                <div class="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm no-print">
-                    <div class="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm sm:mx-4 overflow-hidden transform transition-all mt-auto sm:mt-0 mb-0 sm:mb-auto">
-                        <div class="bg-indigo-600 px-6 py-5 flex justify-between items-center text-white">
+                <div class="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm no-print p-0 sm:p-4">
+                    <div class="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all mt-auto sm:mt-0 mb-0 sm:mb-auto flex flex-col max-h-[90vh]">
+                        <div class="bg-indigo-600 px-6 py-5 flex justify-between items-center text-white shrink-0">
                             <h3 class="font-bold text-lg font-kai tracking-wide"><i class="fas fa-medal mr-2"></i>${t('modal_score_title')}</h3>
                             <button onclick="state.modals.score.visible = false; app.refreshData(true);" class="p-1 -mr-2 text-indigo-200 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
-                        <div class="p-6 space-y-5">
+                        <div class="p-6 space-y-5 overflow-y-auto shrink-0">
                             <div class="bg-indigo-50 p-4 rounded-xl text-base text-indigo-900 border border-indigo-100 flex items-center justify-between shadow-sm">
                                 <span class="font-bold font-mono bg-white px-2 py-1 rounded shadow-sm">${m.className}</span>
                                 <span class="font-bold text-lg text-right break-words max-w-[65%]">${formatName(m.studentName)}</span>
@@ -2329,7 +2352,7 @@
                             
                             <div>
                                 <label class="block text-sm font-bold text-slate-700 mb-1.5">${t('th_score')}</label>
-                                <input type="text" id="indiv-score" value="${m.score}" oninput="state.modals.score.score = this.value" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-lg font-bold text-indigo-700 transition" placeholder="例如: 95">
+                                <input type="number" step="0.1" inputmode="decimal" id="indiv-score" value="${m.score}" oninput="state.modals.score.score = this.value" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-lg font-bold text-indigo-700 transition" placeholder="-">
                             </div>
 
                             <div>
@@ -2340,9 +2363,9 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
-                            <button onclick="state.modals.score.visible = false; app.refreshData(true);" class="px-5 py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition">${t('btn_cancel')}</button>
-                            <button onclick="app.submitScore()" ${state.isSubmitting ? 'disabled' : ''} class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition disabled:opacity-50 flex items-center">
+                        <div class="px-6 py-4 pb-safe bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
+                            <button onclick="state.modals.score.visible = false; app.refreshData(true);" class="px-5 py-3 sm:py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition flex-1 sm:flex-none">${t('btn_cancel')}</button>
+                            <button onclick="app.submitScore()" ${state.isSubmitting ? 'disabled' : ''} class="px-6 py-3 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition disabled:opacity-50 flex items-center justify-center flex-1 sm:flex-none">
                                 ${state.isSubmitting ? '<i class="fas fa-spinner fa-spin mr-2"></i>' : ''} ${t('btn_confirm')}
                             </button>
                         </div>
@@ -2356,13 +2379,13 @@
             if (!m.visible) return '';
 
             return `
-                <div class="fixed inset-0 z-[140] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm no-print">
-                    <div class="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm sm:mx-4 overflow-hidden transform transition-all mt-auto sm:mt-0 mb-0 sm:mb-auto h-auto max-h-[90vh] overflow-y-auto">
-                        <div class="bg-indigo-600 px-6 py-5 flex justify-between items-center text-white sticky top-0 z-10">
+                <div class="fixed inset-0 z-[140] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm no-print p-0 sm:p-4">
+                    <div class="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all mt-auto sm:mt-0 mb-0 sm:mb-auto flex flex-col max-h-[90vh]">
+                        <div class="bg-indigo-600 px-6 py-5 flex justify-between items-center text-white sticky top-0 z-10 shrink-0">
                             <h3 class="font-bold text-lg font-kai tracking-wide"><i class="fas fa-edit mr-2"></i>${t('modal_edit_title')}</h3>
                             <button onclick="state.modals.editCategory.visible = false; app.refreshData(true);" class="p-1 -mr-2 text-indigo-200 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
-                        <div class="p-6 space-y-5">
+                        <div class="p-6 space-y-5 overflow-y-auto shrink-0">
                             <div>
                                 <label class="block text-sm font-bold text-slate-700 mb-1.5">${t('ph_item_name')} <span class="text-rose-500">*</span></label>
                                 <input type="text" oninput="state.modals.editCategory.newName = this.value" value="${m.newName}" class="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 font-bold text-lg transition">
@@ -2371,15 +2394,15 @@
                                 <label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_organizer')}</label>
                                 <input type="text" oninput="state.modals.editCategory.organizer = this.value" value="${m.organizer}" class="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 font-medium transition">
                             </div>
-                            <div class="flex gap-4">
-                                <div class="flex-1"><label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_start_date')}</label><input type="date" oninput="state.modals.editCategory.startDate = this.value" value="${m.startDate}" class="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-medium transition"></div>
-                                <div class="flex-1"><label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_end_date')}</label><input type="date" oninput="state.modals.editCategory.endDate = this.value" value="${m.endDate}" class="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-medium transition"></div>
+                            <div class="flex gap-4 w-full">
+                                <div class="flex-1 w-1/2"><label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_start_date')}</label><input type="date" oninput="state.modals.editCategory.startDate = this.value" value="${m.startDate}" class="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-medium transition"></div>
+                                <div class="flex-1 w-1/2"><label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_end_date')}</label><input type="date" oninput="state.modals.editCategory.endDate = this.value" value="${m.endDate}" class="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-medium transition"></div>
                             </div>
-                            <div class="bg-indigo-50 p-4 rounded-xl text-sm text-indigo-800 border border-indigo-100 leading-relaxed font-medium shadow-sm"><i class="fas fa-info-circle mr-1.5 text-indigo-600"></i> ${t('hint_edit_sync')}</div>
+                            <div class="bg-indigo-50 p-4 rounded-xl text-xs sm:text-sm text-indigo-800 border border-indigo-100 leading-relaxed font-medium shadow-sm"><i class="fas fa-info-circle mr-1.5 text-indigo-600"></i> ${t('hint_edit_sync')}</div>
                         </div>
-                        <div class="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
-                            <button onclick="state.modals.editCategory.visible = false; app.refreshData(true);" class="px-5 py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition">${t('btn_cancel')}</button>
-                            <button onclick="app.submitEditCategory()" ${state.isSubmitting ? 'disabled' : ''} class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition disabled:opacity-50 flex items-center">
+                        <div class="px-6 py-4 pb-safe bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
+                            <button onclick="state.modals.editCategory.visible = false; app.refreshData(true);" class="px-5 py-3 sm:py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition flex-1 sm:flex-none">${t('btn_cancel')}</button>
+                            <button onclick="app.submitEditCategory()" ${state.isSubmitting ? 'disabled' : ''} class="px-6 py-3 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition disabled:opacity-50 flex items-center justify-center flex-1 sm:flex-none">
                                 ${state.isSubmitting ? '<i class="fas fa-spinner fa-spin mr-2"></i>' : ''} ${t('btn_save')}
                             </button>
                         </div>
@@ -2422,20 +2445,20 @@
             const hasWinners = m.left.length > 0 || m.right.length > 0;
 
             return `
-                <div class="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 no-print">
-                    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-full">
+                <div class="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm sm:p-4 no-print">
+                    <div class="bg-white sm:rounded-3xl shadow-2xl w-full h-full sm:h-auto max-w-5xl overflow-hidden flex flex-col max-h-full">
                         <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center shrink-0">
                             <h3 class="font-bold text-lg font-kai tracking-wide"><i class="fas fa-image mr-2 text-indigo-400"></i>${t('poster_title')}</h3>
                             <button onclick="app.closePoster()" class="p-2 -mr-2 text-slate-400 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
-                        <!-- Poster Body -->
-                        <div class="overflow-y-auto p-6 flex-grow bg-slate-100 flex justify-center items-start">
-                            <div id="poster-container" class="poster-container w-[800px] p-10 relative shadow-2xl rounded-xl flex flex-col">
+                        <!-- Poster Body (使用固定尺寸并允许缩放滚动，保证生成的海报高清且排版不乱) -->
+                        <div class="overflow-auto p-4 sm:p-6 flex-grow bg-slate-100 flex justify-start sm:justify-center items-start">
+                            <div id="poster-container" class="poster-container min-w-[800px] w-[800px] p-10 relative shadow-2xl rounded-xl flex flex-col shrink-0 origin-top-left sm:origin-top">
                                 <div class="absolute top-0 left-0 w-32 h-32 border-t-8 border-l-8 border-amber-400 rounded-tl-3xl m-6 opacity-60"></div>
                                 <div class="absolute bottom-0 right-0 w-32 h-32 border-b-8 border-r-8 border-amber-400 rounded-br-3xl m-6 opacity-60"></div>
                                 
                                 <div class="text-center mb-10 relative z-10">
-                                    <div class="text-amber-200 text-xl mb-1 tracking-[0.2em] font-bold">${t('school_name')}</div>
+                                    <div class="text-amber-200 text-xl mb-1 tracking-[0.2em] font-bold">${t('school_name_line2')}</div>
                                     <h1 class="text-5xl font-bold text-white mb-4 tracking-wider drop-shadow-md">${state.selectedCategory}</h1>
                                     <div class="inline-block bg-gradient-to-r from-amber-500 to-amber-300 text-slate-900 border-2 border-amber-200 px-8 py-1.5 rounded-full font-bold text-2xl shadow-xl mt-2">
                                         ${t('poster_subtitle')}
@@ -2460,13 +2483,13 @@
                                 ${!hasWinners ? `<div class="absolute inset-0 flex items-center justify-center text-white/50 text-xl font-bold">${t('msg_no_winners')}</div>` : ''}
                                 
                                 <div class="text-center mt-12 text-amber-200/60 text-xs tracking-wider">
-                                    ${t('school_name')} · ${formatDate(new Date())}
+                                    ${t('school_name_line2')} · ${formatDate(new Date())}
                                 </div>
                             </div>
                         </div>
-                        <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 shrink-0">
-                            <button onclick="app.closePoster()" class="px-5 py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl font-bold transition">${t('btn_close')}</button>
-                            <button onclick="app.downloadPoster()" ${state.isGeneratingPoster ? 'disabled' : ''} class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-md font-bold flex items-center disabled:opacity-50 transition active:scale-95">
+                        <div class="px-6 py-4 pb-safe bg-slate-50 border-t border-slate-200 flex justify-end gap-3 shrink-0">
+                            <button onclick="app.closePoster()" class="px-5 py-3 sm:py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl font-bold transition flex-1 sm:flex-none">${t('btn_close')}</button>
+                            <button onclick="app.downloadPoster()" ${state.isGeneratingPoster ? 'disabled' : ''} class="px-6 py-3 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-md font-bold flex items-center justify-center disabled:opacity-50 transition active:scale-95 flex-1 sm:flex-none">
                                 ${state.isGeneratingPoster ? '<i class="fas fa-spinner fa-spin mr-2"></i>正在生成...' : `<i class="fas fa-download mr-2"></i> ${t('btn_save_img')}`}
                             </button>
                         </div>
@@ -2482,20 +2505,20 @@
             const isInputType = ['prompt', 'password'].includes(m.type);
 
             return `
-                <div class="fixed inset-0 z-[160] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm no-print">
-                    <div class="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm sm:mx-4 overflow-hidden transform transition-all mt-auto sm:mt-0 mb-0 sm:mb-auto">
-                        <div class="bg-indigo-600 px-6 py-5 flex justify-between items-center text-white">
+                <div class="fixed inset-0 z-[160] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm no-print p-0 sm:p-4">
+                    <div class="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all mt-auto sm:mt-0 mb-0 sm:mb-auto flex flex-col max-h-[90vh]">
+                        <div class="bg-indigo-600 px-6 py-5 flex justify-between items-center text-white shrink-0">
                             <h3 class="font-bold text-lg tracking-wide"><i class="${m.icon}"></i> ${m.title}</h3>
                             <button onclick="app.handleModalCancel()" class="p-1 -mr-2 text-indigo-200 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
-                        <div class="p-6">
+                        <div class="p-6 overflow-y-auto shrink-0">
                             <p class="text-slate-700 mb-5 whitespace-pre-line font-medium leading-relaxed">${m.message}</p>
-                            ${isInputType ? `<input type="${m.type === 'password' ? 'password' : 'text'}" id="modal-input" onkeyup="if(event.key==='Enter') app.handleModalConfirm()" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-lg font-bold transition" placeholder="${m.placeholder}">` : ''}
+                            ${isInputType ? `<input type="${m.type === 'password' ? 'password' : 'text'}" id="modal-input" oninput="state.modals.dialog.inputValue=this.value" value="${m.inputValue || ''}" onkeyup="if(event.key==='Enter') app.handleModalConfirm()" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-lg font-bold transition" placeholder="${m.placeholder}">` : ''}
                         </div>
                         ${m.showButtons ? `
-                            <div class="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
-                                ${m.type !== 'alert' ? `<button onclick="app.handleModalCancel()" class="px-5 py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition">${t('btn_cancel')}</button>` : ''}
-                                <button onclick="app.handleModalConfirm()" class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition">${m.confirmText || t('btn_confirm')}</button>
+                            <div class="px-6 py-4 pb-safe bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
+                                ${m.type !== 'alert' ? `<button onclick="app.handleModalCancel()" class="px-5 py-3 sm:py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition flex-1 sm:flex-none">${t('btn_cancel')}</button>` : ''}
+                                <button onclick="app.handleModalConfirm()" class="px-6 py-3 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition flex items-center justify-center flex-1 sm:flex-none">${m.confirmText || t('btn_confirm')}</button>
                             </div>
                         ` : ''}
                     </div>
@@ -2508,9 +2531,9 @@
             if (!t.visible) return '';
 
             return `
-                <div class="fixed top-20 left-1/2 transform -translate-x-1/2 z-[200] px-6 py-3 rounded-full shadow-lg font-bold text-sm flex items-center transition-all duration-300 ${t.type === 'success' ? 'bg-emerald-500 text-white' : (t.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white')}">
-                    <i class="${t.type === 'success' ? 'fas fa-check-circle' : (t.type === 'warning' ? 'fas fa-exclamation-triangle' : 'fas fa-exclamation-circle')} mr-2"></i>
-                    ${t.message}
+                <div class="fixed top-20 left-1/2 transform -translate-x-1/2 z-[200] px-6 py-3 rounded-full shadow-lg font-bold text-sm flex items-center transition-all duration-300 ${t.type === 'success' ? 'bg-emerald-500 text-white' : (t.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white')} w-[90%] sm:w-auto max-w-sm justify-center">
+                    <i class="${t.type === 'success' ? 'fas fa-check-circle' : (t.type === 'warning' ? 'fas fa-exclamation-triangle' : 'fas fa-exclamation-circle')} mr-2 text-lg"></i>
+                    <span class="break-words">${t.message}</span>
                 </div>
             `;
         };
@@ -2549,6 +2572,7 @@
             removeStudentRow,
             changeRegClass,
             toggleTeamBundle,
+            updateStudentSelection,
             submitForm,
             deleteRegistration,
             openScoreModal,
