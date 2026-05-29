@@ -47,12 +47,11 @@
         .sticky-col-left { position: sticky; left: 0; z-index: 10; background-color: inherit; }
         .sticky-col-left-header { z-index: 30; }
 
-        .poster-container {
-            background: linear-gradient(135deg, #312e81 0%, #4338ca 100%);
-            color: #fff;
-            font-family: "LXGW WenKai", serif;
+        /* 海报专属卡片效果 */
+        .poster-card { 
+            background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,255,255,0.92)); 
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1); 
         }
-        .poster-card { background-color: rgba(255, 255, 255, 0.95); color: #333; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         
         @media print { .no-print { display: none !important; } body { background: white; } }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -188,7 +187,7 @@
                 btn_add: "新建项目",
                 label_cloud_list: "云端项目库",
                 poster_title: "荣誉榜海报",
-                poster_subtitle: "荣耀时刻 · 荣誉榜",
+                poster_subtitle: "🌟 闪耀之星 · 荣耀时刻 🌟", // 🎓 更加学术与活泼的语境
                 msg_no_winners: "此项目暂无得奖记录",
                 btn_close: "关闭窗口",
                 btn_save_img: "保存海报",
@@ -212,7 +211,7 @@
                 label_end_date: "结束日期",
                 grade_1: "一年级", grade_2: "二年级", grade_3: "三年级", grade_4: "四年级", grade_5: "五年级", grade_6: "六年级",
                 rank_champ: "冠军", rank_runnerup: "亚军", rank_3rd: "季军", rank_4th: "第四名", rank_5th: "第五名",
-                rank_distinction: "特优奖", rank_excellence: "优秀奖", rank_consolation: "安慰奖"
+                rank_excellence: "优秀奖"
             },
             ms: {
                 school_name_line1: "Sistem Pengurusan Pertandingan Sekolah",
@@ -284,8 +283,8 @@
                 ph_organizer: "Penganjur (Pilihan)",
                 btn_add: "Tambah",
                 label_cloud_list: "Senarai Acara",
-                poster_title: "Papan Kehormatan",
-                poster_subtitle: "Papan Kehormatan",
+                poster_title: "Poster Kehormatan",
+                poster_subtitle: "🌟 Bintang Cemerlang · Detik Gemilang 🌟",
                 msg_no_winners: "Tiada pemenang",
                 btn_close: "Tutup",
                 btn_save_img: "Muat Turun",
@@ -309,7 +308,7 @@
                 label_end_date: "Tarikh Tamat",
                 grade_1: "Tahun 1", grade_2: "Tahun 2", grade_3: "Tahun 3", grade_4: "Tahun 4", grade_5: "Tahun 5", grade_6: "Tahun 6",
                 rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Ketiga", rank_4th: "Keempat", rank_5th: "Kelima",
-                rank_distinction: "Cemerlang", rank_excellence: "Kepujian", rank_consolation: "Saguhati"
+                rank_excellence: "Saguhati"
             },
             en: {
                 school_name_line1: "Intra-school Competition Management",
@@ -382,7 +381,7 @@
                 btn_add: "Create",
                 label_cloud_list: "Cloud Database",
                 poster_title: "Honor Roll Poster",
-                poster_subtitle: "Honor Roll",
+                poster_subtitle: "🌟 Bright Stars · Hall of Fame 🌟",
                 msg_no_winners: "No winners yet",
                 btn_close: "Close",
                 btn_save_img: "Download",
@@ -406,11 +405,11 @@
                 label_end_date: "End Date",
                 grade_1: "Year 1", grade_2: "Year 2", grade_3: "Year 3", grade_4: "Year 4", grade_5: "Year 5", grade_6: "Year 6",
                 rank_champ: "Champion", rank_runnerup: "Runner-up", rank_3rd: "3rd Place", rank_4th: "4th Place", rank_5th: "5th Place",
-                rank_distinction: "Distinction", rank_excellence: "Excellence", rank_consolation: "Consolation"
+                rank_excellence: "Consolation"
             }
         };
 
-        const rankOptions = ['冠军', '亚军', '季军', '第四名', '第五名', '特优奖', '优秀奖', '安慰奖'];
+        const rankOptions = ['冠军', '亚军', '季军', '第四名', '第五名', '优秀奖'];
 
         // --- 3. 辅助计算工具 (Helpers) ---
         const t = (key) => translations[state.lang][key] || key;
@@ -419,7 +418,7 @@
             const map = {
                 '冠军': 'rank_champ', '亚军': 'rank_runnerup', '季军': 'rank_3rd',
                 '第四名': 'rank_4th', '第五名': 'rank_5th',
-                '特优奖': 'rank_distinction', '优秀奖': 'rank_excellence', '安慰奖': 'rank_consolation'
+                '优秀奖': 'rank_excellence'
             };
             return map[dbValue] ? t(map[dbValue]) : dbValue;
         };
@@ -465,7 +464,6 @@
             if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return 'bg-amber-100 text-amber-700 border border-amber-300';
             if (rank.includes('四') || rank === '4th Place' || rank === 'Keempat') return 'bg-teal-100 text-teal-700 border border-teal-300';
             if (rank.includes('五') || rank === '5th Place' || rank === 'Kelima') return 'bg-cyan-100 text-cyan-700 border border-cyan-300';
-            if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return 'bg-purple-100 text-purple-700 border border-purple-300';
             return 'bg-indigo-50 text-indigo-600 border border-indigo-200';
         };
         const getRankWeight = (rank) => {
@@ -475,9 +473,7 @@
             if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return 8000;
             if (rank.includes('四') || rank === '4th Place' || rank === 'Keempat') return 7000;
             if (rank.includes('五') || rank === '5th Place' || rank === 'Kelima') return 6000;
-            if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return 5000;
-            if (rank.includes('优秀') || rank === 'Excellence' || rank === 'Kepujian') return 4000;
-            if (rank.includes('安慰') || rank === 'Consolation' || rank === 'Saguhati') return 3000;
+            if (rank.includes('优秀') || rank === 'Consolation' || rank === 'Saguhati') return 4000;
             return 1000;
         };
 
@@ -494,6 +490,27 @@
         };
         
         const getStudentsByClass = (className) => state.studentDB[className] || [];
+        
+        // 🏅 海报专属辅助函数 (Poster specific helpers)
+        const getRankEmoji = (rank) => {
+            if (!rank) return '🏅';
+            if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return '🏆';
+            if (rank.includes('亚') || rank === 'Runner-up' || rank === 'Naib Johan') return '🥈';
+            if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return '🥉';
+            if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return '🌟';
+            return '🏅';
+        };
+
+        const getRankGradient = (rank) => {
+            if (!rank) return 'from-indigo-400 to-blue-500';
+            if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'from-yellow-400 to-orange-500';
+            if (rank.includes('亚') || rank === 'Runner-up' || rank === 'Naib Johan') return 'from-slate-400 to-slate-500';
+            if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return 'from-amber-500 to-orange-600';
+            if (rank.includes('四') || rank === '4th Place' || rank === 'Keempat') return 'from-teal-400 to-emerald-500';
+            if (rank.includes('五') || rank === '5th Place' || rank === 'Kelima') return 'from-cyan-400 to-blue-500';
+            if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return 'from-purple-500 to-pink-500';
+            return 'from-indigo-400 to-blue-500';
+        };
 
         // --- 4. 数据一致性衍生状态机 (Computed Properties) ---
         const getAvailableYears = () => {
@@ -678,7 +695,19 @@
         };
 
         const fetchAllData = async (isBackground = false) => {
-            if (state.isBatchEditing && isBackground) return;
+            if (isBackground) {
+                if (state.unsyncedQueue.length > 0 && !state.isOfflineMode) {
+                    app.syncQueueData(true); 
+                }
+                const isInteracting = state.isBatchEditing || 
+                                      state.currentTab !== 'results' || 
+                                      state.modals.score.visible || 
+                                      state.modals.editCategory.visible || 
+                                      state.modals.poster.visible || 
+                                      state.modals.dialog.visible;
+                if (isInteracting) return; 
+            }
+            
             if (!isBackground) {
                 state.isRefreshing = true;
                 updateDOM();
@@ -742,10 +771,10 @@
             }
         };
 
-        const syncQueueData = async () => {
+        const syncQueueData = async (silent = false) => {
             if (state.isSubmitting || state.unsyncedQueue.length === 0) return;
             state.isSubmitting = true;
-            updateDOM();
+            if (!silent) updateDOM();
             
             let successCount = 0;
             const remaining = [...state.unsyncedQueue];
@@ -775,9 +804,10 @@
             localStorage.setItem('unsyncedQueue', JSON.stringify(state.unsyncedQueue));
             localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
             
-            if (successCount > 0) showToast(`🎉 成功安全上云补传了 ${successCount} 条数据！`);
-            if (remaining.length > 0) showToast(`仍有 ${remaining.length} 条数据未能同步。`, 'error');
-            fetchAllData(true);
+            if (!silent && successCount > 0) showToast(`🎉 成功安全上云补传了 ${successCount} 条数据！`);
+            if (!silent && remaining.length > 0) showToast(`仍有 ${remaining.length} 条数据未能同步。`, 'error');
+            
+            fetchAllData(silent);
         };
 
         // --- 6. 事件控制器总线 (Application Handlers Bus) ---
@@ -1529,7 +1559,7 @@
             state.modals.dialog.visible = false; 
             updateDOM();
         };
-        
+
         const showToast = (message, type = 'success') => {
             state.toast = { visible: true, message, type };
             updateDOM();
@@ -1611,12 +1641,8 @@
             return [];
         };
 
-        // 🛡️ [修复]: 已移除旧版的 Blob ServiceWorker 注册逻辑，因现代浏览器默认阻断该协议
-        // 该单文件系统仍依靠 LocalStorage 实现防丢离线缓存
         const initPWA = () => {
             if (typeof window === 'undefined') return;
-            
-            // 1. 动态生成并注入 PWA 必要的 Web App Manifest
             const manifest = {
                 name: "新廊华小竞赛系统",
                 short_name: "华小竞赛",
@@ -1630,10 +1656,6 @@
             link.rel = 'manifest';
             link.href = `data:application/manifest+json;charset=utf-8,${encodeURIComponent(JSON.stringify(manifest))}`;
             document.head.appendChild(link);
-
-            if ('serviceWorker' in navigator) {
-                console.log('💡 提示: 单文件版本已启用 LocalStorage 离线缓冲。如需系统级别的离线 PWA 安装，需配合独立的 sw.js 服务器文件。');
-            }
         };
 
         const normalizeData = (rawData) => {
@@ -1660,11 +1682,11 @@
         const nextTick = (cb) => setTimeout(cb, 16);
 
         const updateDOM = () => {
-            // 保存当前获得焦点的元素状态，防止原生 DOM 重建时输入框失去焦点
             const activeEl = document.activeElement;
             const activeId = activeEl ? activeEl.id : null;
             const selectionStart = activeEl && ('selectionStart' in activeEl) ? activeEl.selectionStart : null;
             const selectionEnd = activeEl && ('selectionEnd' in activeEl) ? activeEl.selectionEnd : null;
+            const currentScrollY = window.scrollY;
 
             const app = document.getElementById('app');
             app.innerHTML = `
@@ -1713,18 +1735,16 @@
                 ${renderModals()}
             `;
 
-            // 恢复焦点及光标位置
             if (activeId) {
                 const newActiveEl = document.getElementById(activeId);
                 if (newActiveEl) {
                     newActiveEl.focus();
                     if (selectionStart !== null && selectionEnd !== null) {
-                        try {
-                            newActiveEl.setSelectionRange(selectionStart, selectionEnd);
-                        } catch (e) {}
+                        try { newActiveEl.setSelectionRange(selectionStart, selectionEnd); } catch (e) {}
                     }
                 }
             }
+            window.scrollTo(0, currentScrollY);
         };
 
         const renderActiveTab = () => {
@@ -1824,7 +1844,7 @@
                     : `<div class="absolute top-0 right-0 bg-slate-500 text-white text-xs px-3 py-1.5 rounded-bl-xl font-bold z-10 shadow-sm">${group.effectiveStatus === 'auto_closed' ? t('status_auto_ended') : t('status_ended')}</div>`;
 
                 return `
-                    <div onclick="app.selectCategory('${group.categoryName}')" 
+                    <div onclick="app.selectCategory(decodeURIComponent('${encodeURIComponent(group.categoryName)}'))" 
                          class="${group.effectiveStatus !== 'open' ? 'bg-slate-50 border-slate-200 grayscale opacity-80 hover:grayscale-0 shadow-sm' : 'bg-white border-transparent hover:border-indigo-400 shadow-md hover:shadow-xl'} rounded-3xl border-2 transition-all cursor-pointer p-6 flex flex-col items-center text-center group h-full transform hover:-translate-y-1 relative overflow-hidden">
                         
                         ${group.effectiveStatus !== 'open' ? statusBadge : ''}
@@ -1915,7 +1935,7 @@
                                     </div>
                                 </div>
 
-                                <button onclick="app.goToRegister('${state.selectedCategory}')" ${getCategoryStatus(state.selectedCategory) !== 'open' ? 'disabled' : ''} class="${getCategoryStatus(state.selectedCategory) !== 'open' ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-md'} text-white px-4 sm:px-5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center transition">
+                                <button onclick="app.goToRegister(decodeURIComponent('${encodeURIComponent(state.selectedCategory)}'))" ${getCategoryStatus(state.selectedCategory) !== 'open' ? 'disabled' : ''} class="${getCategoryStatus(state.selectedCategory) !== 'open' ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-md'} text-white px-4 sm:px-5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center transition">
                                     <i class="fas fa-plus-circle mr-1 sm:mr-2"></i> ${t('btn_add_reg')}
                                 </button>
                             </div>
@@ -1931,7 +1951,7 @@
             return `
                 <div class="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 no-print shadow-sm mx-4 sm:mx-0">
                     <p class="text-slate-500 mb-5 font-medium">${t('msg_no_records')}</p>
-                    <button onclick="app.goToRegister('${state.selectedCategory}')" ${getCategoryStatus(state.selectedCategory) !== 'open' ? 'disabled' : ''} class="${getCategoryStatus(state.selectedCategory) !== 'open' ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-md'} text-white px-8 py-2.5 rounded-full font-bold transition">${t('btn_go_register')}</button>
+                    <button onclick="app.goToRegister(decodeURIComponent('${encodeURIComponent(state.selectedCategory)}'))" ${getCategoryStatus(state.selectedCategory) !== 'open' ? 'disabled' : ''} class="${getCategoryStatus(state.selectedCategory) !== 'open' ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-md'} text-white px-8 py-2.5 rounded-full font-bold transition">${t('btn_go_register')}</button>
                 </div>
             `;
         };
@@ -2035,8 +2055,8 @@
                             ${stu.rank ? `<span class="${getRankClass(stu.rank)} text-xs px-2.5 py-0.5 rounded-md font-bold shadow-sm whitespace-nowrap">${t_rank(stu.rank)}</span>` : ''}
                             ${(!stu.rank && stu.score) ? `<span class="text-slate-600 font-mono text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold">${stu.score}分</span>` : ''}
                             
-                            <button onclick="app.deleteRegistration('${stu.studentName}', '${cls.className}')" class="text-slate-400 hover:text-rose-500 p-1.5 transition sm:opacity-0 group-hover:opacity-100 no-print" title="删除"><i class="fas fa-trash-alt"></i></button>
-                            <button onclick="app.openScoreModal('${stu.studentName}', '${cls.className}', '${stu.score || ''}', '${stu.rank || ''}')" class="text-slate-400 hover:text-indigo-600 p-1.5 transition sm:opacity-0 group-hover:opacity-100 no-print" title="打分"><i class="fas fa-pencil-alt"></i></button>
+                            <button onclick="app.deleteRegistration(decodeURIComponent('${encodeURIComponent(stu.studentName)}'), decodeURIComponent('${encodeURIComponent(cls.className)}'))" class="text-slate-400 hover:text-rose-500 p-1.5 transition sm:opacity-0 group-hover:opacity-100 no-print" title="删除"><i class="fas fa-trash-alt"></i></button>
+                            <button onclick="app.openScoreModal(decodeURIComponent('${encodeURIComponent(stu.studentName)}'), decodeURIComponent('${encodeURIComponent(cls.className)}'), '${stu.score || ''}', '${stu.rank || ''}')" class="text-slate-400 hover:text-indigo-600 p-1.5 transition sm:opacity-0 group-hover:opacity-100 no-print" title="打分"><i class="fas fa-pencil-alt"></i></button>
                         </div>
                     </li>
                 `).join('');
@@ -2123,31 +2143,35 @@
                 <option value="${i.name}" ${state.form.category === i.name ? 'selected' : ''}>${i.name}</option>
             `).join('');
 
-            const classOptions = state.classList.map(cls => `
-                <option value="${cls}">${cls}</option>
-            `).join('');
-
             const classGroupsHTML = state.form.groups.map((group, gIndex) => {
-                const studentsOptions = group.class ? getStudentsByClass(group.class).map(stu => `
-                    <option value="${stu}" ${group.students.includes(stu) ? 'selected' : ''}>${formatName(stu, true)}</option>
-                `).join('') : '';
-
-                const studentRows = group.students.map((stu, sIndex) => `
-                    <div class="flex gap-2 items-center">
-                        <div class="relative flex-grow">
-                            <span class="absolute left-3 top-3.5 text-xs font-bold text-slate-400">${sIndex + 1}.</span>
-                            <select onchange="app.updateStudentSelection(${gIndex}, ${sIndex}, this.value)" required class="w-full rounded-xl border border-emerald-200 pl-8 p-2.5 bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 transition shadow-sm">
-                                <option value="" ${!stu ? 'selected' : ''}>${t('opt_empty')}</option>
-                                ${studentsOptions}
-                            </select>
-                        </div>
-                        ${group.students.length > 1 ? `
-                            <button type="button" onclick="app.removeStudentRow(${gIndex}, ${sIndex})" class="text-slate-300 hover:text-rose-500 px-2 transition">
-                                <i class="fas fa-minus-circle text-xl"></i>
-                            </button>
-                        ` : ''}
-                    </div>
+                // 🛡️ 修复 1：将班级选项的生成移入循环，动态判断哪个班级被 selected
+                const classOptions = state.classList.map(cls => `
+                    <option value="${cls}" ${group.class === cls ? 'selected' : ''}>${cls}</option>
                 `).join('');
+
+                const studentRows = group.students.map((stu, sIndex) => {
+                    // 🛡️ 修复 2：将学生选项的生成移入循环，动态判断哪个学生被 selected
+                    const studentsOptions = group.class ? getStudentsByClass(group.class).map(s => `
+                        <option value="${s}" ${stu === s ? 'selected' : ''}>${formatName(s, true)}</option>
+                    `).join('') : '';
+
+                    return `
+                        <div class="flex gap-2 items-center">
+                            <div class="relative flex-grow">
+                                <span class="absolute left-3 top-3.5 text-xs font-bold text-slate-400">${sIndex + 1}.</span>
+                                <select id="reg-student-${gIndex}-${sIndex}" onchange="app.updateStudentSelection(${gIndex}, ${sIndex}, this.value)" required class="w-full rounded-xl border border-emerald-200 pl-8 p-2.5 bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 transition shadow-sm">
+                                    <option value="" ${!stu ? 'selected' : ''}>${t('opt_empty')}</option>
+                                    ${studentsOptions}
+                                </select>
+                            </div>
+                            ${group.students.length > 1 ? `
+                                <button type="button" onclick="app.removeStudentRow(${gIndex}, ${sIndex})" class="text-slate-300 hover:text-rose-500 px-2 transition">
+                                    <i class="fas fa-minus-circle text-xl"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('');
 
                 return `
                     <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 relative shadow-sm">
@@ -2163,7 +2187,7 @@
                                 <label class="block text-sm font-bold text-indigo-900 mb-2.5">${t('label_team_name')}</label>
                                 <div class="relative">
                                     <i class="fas fa-users absolute left-4 top-1/2 transform -translate-y-1/2 text-indigo-400"></i>
-                                    <input type="text" oninput="state.form.groups[${gIndex}].teamName = this.value" value="${group.teamName || ''}" placeholder="${t('ph_team_name')}" required class="w-full rounded-xl border-2 border-indigo-200 pl-10 p-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 bg-white font-bold text-indigo-900 transition shadow-inner">
+                                    <input type="text" id="team-name-${gIndex}" oninput="state.form.groups[${gIndex}].teamName = this.value" value="${group.teamName || ''}" placeholder="${t('ph_team_name')}" required class="w-full rounded-xl border-2 border-indigo-200 pl-10 p-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 bg-white font-bold text-indigo-900 transition shadow-inner">
                                 </div>
                             </div>
                         ` : ''}
@@ -2171,7 +2195,7 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
                             <div>
                                 <label class="block text-sm font-bold text-indigo-800 mb-2.5">${t('label_class')}</label>
-                                <select onchange="app.changeRegClass(${gIndex}, this.value)" required class="w-full rounded-xl border-2 border-indigo-200 p-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 bg-white font-mono text-lg font-bold text-indigo-900 transition shadow-inner">
+                                <select id="reg-class-${gIndex}" onchange="app.changeRegClass(${gIndex}, this.value)" required class="w-full rounded-xl border-2 border-indigo-200 p-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 bg-white font-mono text-lg font-bold text-indigo-900 transition shadow-inner">
                                     <option value="" disabled ${!group.class ? 'selected' : ''}>${t('ph_select_class')}</option>
                                     ${classOptions}
                                 </select>
@@ -2213,7 +2237,7 @@
                     <form onsubmit="event.preventDefault(); app.submitForm();" class="space-y-5">
                         <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <label class="block text-sm font-bold text-slate-700 mb-2.5">${t('label_item')}</label>
-                            <select onchange="state.form.category = this.value" required class="w-full rounded-xl border-2 border-slate-300 p-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 bg-white font-bold text-slate-800 transition">
+                            <select id="reg-category" onchange="state.form.category = this.value" required class="w-full rounded-xl border-2 border-slate-300 p-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 bg-white font-bold text-slate-800 transition">
                                 <option value="" disabled ${!state.form.category ? 'selected' : ''}>${t('ph_select_item')}</option>
                                 ${activeCompsOptions}
                             </select>
@@ -2265,7 +2289,7 @@
                 return `
                     <li class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition gap-4 sm:gap-0">
                         <div class="flex items-center w-full sm:w-auto">
-                            <button onclick="app.toggleStatus('${item.name}')" class="mr-4 text-2xl transition-transform active:scale-90 focus:outline-none">
+                            <button onclick="app.toggleStatus(decodeURIComponent('${encodeURIComponent(item.name)}'))" class="mr-4 text-2xl transition-transform active:scale-90 focus:outline-none">
                                 <i class="fas ${item.status === 'closed' ? 'fa-play-circle text-emerald-500' : 'fa-pause-circle text-slate-300 hover:text-slate-400'}"></i>
                             </button>
                             <div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center mr-3 flex-shrink-0">
@@ -2281,7 +2305,7 @@
                         </div>
                         <div class="flex gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0 mt-2 sm:mt-0">
                             <button onclick="app.openEditCategory('${encItem}')" class="text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 px-4 py-2 sm:p-2 rounded-lg transition font-bold text-sm sm:text-base flex-1 sm:flex-none"><i class="fas fa-edit sm:mr-0 mr-1"></i> <span class="sm:hidden">编辑</span></button>
-                            <button onclick="app.adminDeleteItem('${item.name}')" class="text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-4 py-2 sm:p-2 rounded-lg transition font-bold text-sm sm:text-base flex-1 sm:flex-none"><i class="fas fa-trash-alt sm:mr-0 mr-1"></i> <span class="sm:hidden">删除</span></button>
+                            <button onclick="app.adminDeleteItem(decodeURIComponent('${encodeURIComponent(item.name)}'))" class="text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-4 py-2 sm:p-2 rounded-lg transition font-bold text-sm sm:text-base flex-1 sm:flex-none"><i class="fas fa-trash-alt sm:mr-0 mr-1"></i> <span class="sm:hidden">删除</span></button>
                         </div>
                     </li>
                 `;
@@ -2417,21 +2441,27 @@
 
             const renderWinnersCol = (colData) => {
                 return colData.map(group => `
-                    <div>
-                        <div class="flex items-center mb-4">
-                            <div class="h-[2px] bg-amber-400/50 flex-grow"></div>
-                            <span class="mx-4 text-amber-200 font-bold text-xl">${group.translatedLabel}</span>
-                            <div class="h-[2px] bg-amber-400/50 flex-grow"></div>
+                    <div class="mb-4">
+                        <div class="flex items-center mb-5 mt-2">
+                            <div class="h-1 bg-gradient-to-r from-transparent to-yellow-300 flex-grow rounded-l-full"></div>
+                            <span class="mx-4 bg-yellow-300 text-indigo-900 px-4 py-1.5 rounded-full font-black text-xl shadow-md">${group.translatedLabel}</span>
+                            <div class="h-1 bg-gradient-to-l from-transparent to-yellow-300 flex-grow rounded-r-full"></div>
                         </div>
-                        <div class="grid grid-cols-1 gap-3">
+                        <div class="grid grid-cols-1 gap-4">
                             ${group.winners.map(stu => `
-                                <div class="poster-card px-4 py-3.5 rounded-xl flex items-center justify-between">
-                                    <div>
-                                        <div class="text-indigo-900 font-bold text-lg leading-tight">${formatName(stu.studentName)}</div>
-                                        <div class="text-slate-500 text-sm mt-0.5">${stu.className}</div>
+                                <div class="poster-card px-5 py-4 rounded-2xl flex items-center justify-between relative overflow-hidden">
+                                    <div class="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-yellow-400 to-orange-500"></div>
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-2xl shadow-inner border border-indigo-100 flex-shrink-0">
+                                            ${getRankEmoji(stu.rank)}
+                                        </div>
+                                        <div>
+                                            <div class="text-indigo-950 font-black text-lg sm:text-xl leading-tight">${formatName(stu.studentName)}</div>
+                                            <div class="text-indigo-600/80 font-bold text-sm mt-0.5"><i class="fas fa-graduation-cap mr-1"></i>${stu.className}</div>
+                                        </div>
                                     </div>
-                                    <div class="text-right">
-                                        <span class="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">${t_rank(stu.rank)}</span>
+                                    <div class="text-right pl-4 z-10">
+                                        <span class="inline-block bg-gradient-to-br ${getRankGradient(stu.rank)} text-white px-3.5 py-1.5 rounded-full text-sm font-black shadow-md whitespace-nowrap border border-white/50">${t_rank(stu.rank)}</span>
                                     </div>
                                 </div>
                             `).join('')}
@@ -2451,28 +2481,43 @@
                             <h3 class="font-bold text-lg font-kai tracking-wide"><i class="fas fa-image mr-2 text-indigo-400"></i>${t('poster_title')}</h3>
                             <button onclick="app.closePoster()" class="p-2 -mr-2 text-slate-400 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
-                        <!-- Poster Body (使用固定尺寸并允许缩放滚动，保证生成的海报高清且排版不乱) -->
+                        
+                        <!-- Poster Body -->
                         <div class="overflow-auto p-4 sm:p-6 flex-grow bg-slate-100 flex justify-start sm:justify-center items-start">
-                            <div id="poster-container" class="poster-container min-w-[800px] w-[800px] p-10 relative shadow-2xl rounded-xl flex flex-col shrink-0 origin-top-left sm:origin-top">
-                                <div class="absolute top-0 left-0 w-32 h-32 border-t-8 border-l-8 border-amber-400 rounded-tl-3xl m-6 opacity-60"></div>
-                                <div class="absolute bottom-0 right-0 w-32 h-32 border-b-8 border-r-8 border-amber-400 rounded-br-3xl m-6 opacity-60"></div>
+                            <div id="poster-container" class="poster-container min-w-[800px] w-[800px] p-12 relative shadow-2xl rounded-xl flex flex-col shrink-0 origin-top-left sm:origin-top bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 overflow-hidden">
                                 
-                                <div class="text-center mb-10 relative z-10">
-                                    <div class="text-amber-200 text-xl mb-1 tracking-[0.2em] font-bold">${t('school_name_line2')}</div>
-                                    <h1 class="text-5xl font-bold text-white mb-4 tracking-wider drop-shadow-md">${state.selectedCategory}</h1>
-                                    <div class="inline-block bg-gradient-to-r from-amber-500 to-amber-300 text-slate-900 border-2 border-amber-200 px-8 py-1.5 rounded-full font-bold text-2xl shadow-xl mt-2">
+                                <!-- Lively Geometric Background for html2canvas compatibility -->
+                                <div class="absolute -top-20 -left-20 w-64 h-64 bg-white/10 rounded-full"></div>
+                                <div class="absolute top-10 right-10 w-24 h-24 bg-yellow-300/20 rounded-full"></div>
+                                <div class="absolute bottom-32 left-8 w-16 h-16 bg-white/20 rounded-full"></div>
+                                <div class="absolute -bottom-32 -right-32 w-80 h-80 bg-blue-400/20 rounded-full"></div>
+                                
+                                <!-- Academic & Lively Emojis -->
+                                <div class="absolute top-16 left-12 text-5xl opacity-30 transform -rotate-12">🎓</div>
+                                <div class="absolute bottom-24 left-16 text-6xl opacity-30 transform rotate-12">📚</div>
+                                <div class="absolute top-24 right-16 text-6xl opacity-40 transform rotate-45">🌟</div>
+                                <div class="absolute bottom-16 right-16 text-5xl opacity-30 transform -rotate-12">💡</div>
+                                <div class="absolute top-1/2 left-6 text-4xl opacity-30 transform -rotate-12">🚀</div>
+                                <div class="absolute top-1/3 right-8 text-5xl opacity-30 transform rotate-12">🎨</div>
+
+                                <div class="text-center mb-10 relative z-10 mt-4">
+                                    <div class="inline-block bg-white/20 backdrop-blur-sm px-6 py-2 rounded-full text-white text-sm sm:text-base tracking-[0.2em] font-bold border border-white/40 shadow-sm mb-4">
+                                        <i class="fas fa-school mr-2"></i>${t('school_name_line2')}
+                                    </div>
+                                    <h1 class="text-5xl sm:text-6xl font-black text-white mb-6 tracking-wider drop-shadow-md" style="text-shadow: 0 4px 10px rgba(0,0,0,0.2);">${state.selectedCategory}</h1>
+                                    <div class="inline-block bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500 text-indigo-900 border-[3px] border-white px-10 py-3 rounded-full font-black text-2xl shadow-xl transform -rotate-2">
                                         ${t('poster_subtitle')}
                                     </div>
                                 </div>
 
-                                <div class="flex-grow relative z-10 flex gap-8 items-start justify-center min-h-[300px]">
+                                <div class="flex-grow relative z-10 flex gap-8 items-start justify-center min-h-[300px] mt-4">
                                     <!-- Left -->
                                     <div class="flex-1 flex flex-col space-y-6">
                                         ${leftHTML}
                                     </div>
                                     
                                     <!-- 中间分割线 -->
-                                    ${(m.left.length && m.right.length) ? `<div class="w-[2px] bg-amber-400/30 self-stretch rounded-full"></div>` : ''}
+                                    ${(m.left.length && m.right.length) ? `<div class="w-[3px] bg-white/30 self-stretch rounded-full"></div>` : ''}
                                     
                                     <!-- 右边部分 -->
                                     <div class="flex-1 flex flex-col space-y-6">
@@ -2482,7 +2527,7 @@
                                 
                                 ${!hasWinners ? `<div class="absolute inset-0 flex items-center justify-center text-white/50 text-xl font-bold">${t('msg_no_winners')}</div>` : ''}
                                 
-                                <div class="text-center mt-12 text-amber-200/60 text-xs tracking-wider">
+                                <div class="text-center mt-12 text-white/60 font-bold text-xs tracking-wider">
                                     ${t('school_name_line2')} · ${formatDate(new Date())}
                                 </div>
                             </div>
