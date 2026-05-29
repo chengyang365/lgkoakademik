@@ -307,11 +307,11 @@
                 label_start_date: "Tarikh Mula",
                 label_end_date: "Tarikh Tamat",
                 grade_1: "Tahun 1", grade_2: "Tahun 2", grade_3: "Tahun 3", grade_4: "Tahun 4", grade_5: "Tahun 5", grade_6: "Tahun 6",
-                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Ketiga", rank_4th: "Keempat", rank_5th: "Kelima",
+                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Tempat Ketiga", rank_4th: "Tempat Keempat", rank_5th: "Tempat Kelima",
                 rank_excellence: "Saguhati"
             },
             en: {
-                school_name_line1: "Intra-school Competition Management",
+                school_name_line1: "Intra-school Competition Management System",
                 school_name_line2: "SJK (C) Ladang Grisek",
                 school_header_print: "SJK (C) Ladang Grisek",
                 system_subtitle: "Cloud Real-time",
@@ -404,7 +404,7 @@
                 label_start_date: "Start Date",
                 label_end_date: "End Date",
                 grade_1: "Year 1", grade_2: "Year 2", grade_3: "Year 3", grade_4: "Year 4", grade_5: "Year 5", grade_6: "Year 6",
-                rank_champ: "Champion", rank_runnerup: "Runner-up", rank_3rd: "3rd Place", rank_4th: "4th Place", rank_5th: "5th Place",
+                rank_champ: "Champion", rank_runnerup: "1st Runner-up", rank_3rd: "2nd Runner-up", rank_4th: "4th Place", rank_5th: "5th Place",
                 rank_excellence: "Consolation"
             }
         };
@@ -460,8 +460,8 @@
         const getRankClass = (rank) => {
             if (!rank) return '';
             if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'bg-yellow-100 text-yellow-700 border border-yellow-300';
-            if (rank.includes('亚') || rank === 'Runner-up' || rank === 'Naib Johan') return 'bg-slate-200 text-slate-700 border border-slate-400';
-            if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return 'bg-amber-100 text-amber-700 border border-amber-300';
+            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 'bg-slate-200 text-slate-700 border border-slate-400';
+            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return 'bg-amber-100 text-amber-700 border border-amber-300';
             if (rank.includes('四') || rank === '4th Place' || rank === 'Keempat') return 'bg-teal-100 text-teal-700 border border-teal-300';
             if (rank.includes('五') || rank === '5th Place' || rank === 'Kelima') return 'bg-cyan-100 text-cyan-700 border border-cyan-300';
             return 'bg-indigo-50 text-indigo-600 border border-indigo-200';
@@ -469,10 +469,10 @@
         const getRankWeight = (rank) => {
             if (!rank) return 0;
             if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 10000;
-            if (rank.includes('亚') || rank === 'Runner-up' || rank === 'Naib Johan') return 9000;
-            if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return 8000;
-            if (rank.includes('四') || rank === '4th Place' || rank === 'Keempat') return 7000;
-            if (rank.includes('五') || rank === '5th Place' || rank === 'Kelima') return 6000;
+            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 9000;
+            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Tempat Ketiga') return 8000;
+            if (rank.includes('四') || rank === '4th Place' || rank === 'Tempat Keempat') return 7000;
+            if (rank.includes('五') || rank === '5th Place' || rank === 'Tempat Kelima') return 6000;
             if (rank.includes('优秀') || rank === 'Consolation' || rank === 'Saguhati') return 4000;
             return 1000;
         };
@@ -495,8 +495,8 @@
         const getRankEmoji = (rank) => {
             if (!rank) return '🏅';
             if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return '🏆';
-            if (rank.includes('亚') || rank === 'Runner-up' || rank === 'Naib Johan') return '🥈';
-            if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return '🥉';
+            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return '🥈';
+            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Tempat Ketiga') return '🥉';
             if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return '🌟';
             return '🏅';
         };
@@ -504,10 +504,10 @@
         const getRankGradient = (rank) => {
             if (!rank) return 'from-indigo-400 to-blue-500';
             if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'from-yellow-400 to-orange-500';
-            if (rank.includes('亚') || rank === 'Runner-up' || rank === 'Naib Johan') return 'from-slate-400 to-slate-500';
-            if (rank.includes('季') || rank === '3rd Place' || rank === 'Ketiga') return 'from-amber-500 to-orange-600';
-            if (rank.includes('四') || rank === '4th Place' || rank === 'Keempat') return 'from-teal-400 to-emerald-500';
-            if (rank.includes('五') || rank === '5th Place' || rank === 'Kelima') return 'from-cyan-400 to-blue-500';
+            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 'from-slate-400 to-slate-500';
+            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Tempat Ketiga') return 'from-amber-500 to-orange-600';
+            if (rank.includes('四') || rank === 'Fourth Place' || rank === 'Tempat Keempat') return 'from-teal-400 to-emerald-500';
+            if (rank.includes('五') || rank === 'Fifth Place' || rank === 'Tempat Kelima') return 'from-cyan-400 to-blue-500';
             if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return 'from-purple-500 to-pink-500';
             return 'from-indigo-400 to-blue-500';
         };
