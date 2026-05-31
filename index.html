@@ -42,15 +42,16 @@
         .loader-white { border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* 移动端表格粘性头部与防穿模加固 */
-        .sticky-table-header { position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .sticky-col-left { position: sticky; left: 0; z-index: 10; background-color: inherit; }
-        .sticky-col-left-header { z-index: 30; }
-
-        /* 海报专属卡片效果 */
+        .poster-container {
+            background: linear-gradient(135deg, #4f46e5 0%, #a855f7 50%, #ec4899 100%);
+            color: #fff;
+            font-family: "LXGW WenKai", serif;
+        }
         .poster-card { 
-            background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,255,255,0.92)); 
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1); 
+            background-color: rgba(255, 255, 255, 0.95); 
+            color: #333; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), inset 0 2px 4px rgba(255,255,255,0.5); 
+            border: 1px solid rgba(255,255,255,0.8);
         }
         
         @media print { .no-print { display: none !important; } body { background: white; } }
@@ -88,6 +89,7 @@
             isAdmin: false,
             adminPwd: '',
             isBatchEditing: false,
+            showScoreColumn: false, // 🛡️ 是否显示分数录入栏（默认折叠）
             isOfflineMode: false,
             isGeneratingPoster: false,
             selectedYear: localStorage.getItem('app_selected_year') || currentYear,
@@ -102,7 +104,7 @@
             searchQuery: '',
             
             form: { category: '', isTeamBundle: false, groups: [] },
-            keepClassInfo: false,
+            keepClassInfo: false, // 🛡️ 默认不勾选保留
             
             adminForm: { name: '', organizer: '', startDate: '', endDate: '' },
             modals: {
@@ -138,7 +140,7 @@
                 btn_goto_add: "前往后台添加",
                 btn_back: "返回大厅",
                 label_organizer: "主办方",
-                mode_entry: "快捷录分中",
+                mode_entry: "快捷录分模式",
                 msg_no_records: "暂无参赛记录",
                 btn_go_register: "前往报名",
                 btn_batch_entry: "批量打分",
@@ -187,7 +189,7 @@
                 btn_add: "新建项目",
                 label_cloud_list: "云端项目库",
                 poster_title: "荣誉榜海报",
-                poster_subtitle: "🌟 闪耀之星 · 荣耀时刻 🌟", // 🎓 更加学术与活泼的语境
+                poster_subtitle: "🌟 闪耀之星 · 荣耀时刻 🌟",
                 msg_no_winners: "此项目暂无得奖记录",
                 btn_close: "关闭窗口",
                 btn_save_img: "保存海报",
@@ -210,8 +212,7 @@
                 label_start_date: "开始日期",
                 label_end_date: "结束日期",
                 grade_1: "一年级", grade_2: "二年级", grade_3: "三年级", grade_4: "四年级", grade_5: "五年级", grade_6: "六年级",
-                rank_champ: "冠军", rank_runnerup: "亚军", rank_3rd: "季军", rank_4th: "第四名", rank_5th: "第五名",
-                rank_excellence: "优秀奖"
+                rank_champ: "冠军", rank_runnerup: "亚军", rank_3rd: "季军", rank_4th: "第四名", rank_5th: "第五名", rank_excellence: "优秀奖"
             },
             ms: {
                 school_name_line1: "Sistem Pengurusan Pertandingan Sekolah",
@@ -283,7 +284,7 @@
                 ph_organizer: "Penganjur (Pilihan)",
                 btn_add: "Tambah",
                 label_cloud_list: "Senarai Acara",
-                poster_title: "Poster Kehormatan",
+                poster_title: "Papan Kehormatan",
                 poster_subtitle: "🌟 Bintang Cemerlang · Detik Gemilang 🌟",
                 msg_no_winners: "Tiada pemenang",
                 btn_close: "Tutup",
@@ -307,11 +308,10 @@
                 label_start_date: "Tarikh Mula",
                 label_end_date: "Tarikh Tamat",
                 grade_1: "Tahun 1", grade_2: "Tahun 2", grade_3: "Tahun 3", grade_4: "Tahun 4", grade_5: "Tahun 5", grade_6: "Tahun 6",
-                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Tempat Ketiga", rank_4th: "Tempat Keempat", rank_5th: "Tempat Kelima",
-                rank_excellence: "Saguhati"
+                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Tempat Ketiga", rank_4th: "Tempat Keempat", rank_5th: "Tempat Kelima", rank_excellence: "Saguhati"
             },
             en: {
-                school_name_line1: "Intra-school Competition Management System",
+                school_name_line1: "Intra-school Competition Management",
                 school_name_line2: "SJK (C) Ladang Grisek",
                 school_header_print: "SJK (C) Ladang Grisek",
                 system_subtitle: "Cloud Real-time",
@@ -404,8 +404,7 @@
                 label_start_date: "Start Date",
                 label_end_date: "End Date",
                 grade_1: "Year 1", grade_2: "Year 2", grade_3: "Year 3", grade_4: "Year 4", grade_5: "Year 5", grade_6: "Year 6",
-                rank_champ: "Champion", rank_runnerup: "1st Runner-up", rank_3rd: "2nd Runner-up", rank_4th: "4th Place", rank_5th: "5th Place",
-                rank_excellence: "Consolation"
+                rank_champ: "Champion", rank_runnerup: "1st Runner-up", rank_3rd: "2nd Runner-up", rank_4th: "Fourth Place", rank_5th: "Fifth Place", rank_excellence: "Consolation"
             }
         };
 
@@ -417,8 +416,7 @@
             if (!dbValue) return '';
             const map = {
                 '冠军': 'rank_champ', '亚军': 'rank_runnerup', '季军': 'rank_3rd',
-                '第四名': 'rank_4th', '第五名': 'rank_5th',
-                '优秀奖': 'rank_excellence'
+                '第四名': 'rank_4th', '第五名': 'rank_5th', '优秀奖': 'rank_excellence'
             };
             return map[dbValue] ? t(map[dbValue]) : dbValue;
         };
@@ -462,17 +460,18 @@
             if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'bg-yellow-100 text-yellow-700 border border-yellow-300';
             if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 'bg-slate-200 text-slate-700 border border-slate-400';
             if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return 'bg-amber-100 text-amber-700 border border-amber-300';
-            if (rank.includes('四') || rank === '4th Place' || rank === 'Keempat') return 'bg-teal-100 text-teal-700 border border-teal-300';
-            if (rank.includes('五') || rank === '5th Place' || rank === 'Kelima') return 'bg-cyan-100 text-cyan-700 border border-cyan-300';
-            return 'bg-indigo-50 text-indigo-600 border border-indigo-200';
+            if (rank.includes('四') || rank === 'Fourth Place' || rank === 'Keempat') return 'bg-teal-100 text-teal-700 border border-teal-300';
+            if (rank.includes('五') || rank === 'Fifth Place' || rank === 'Kelima') return 'bg-cyan-100 text-cyan-700 border border-cyan-300';
+            if (rank.includes('优秀') || rank === 'Consolation' || rank === 'Saguhati') return 'bg-indigo-50 text-indigo-600 border border-indigo-200';
+            return 'bg-slate-100 text-slate-600 border border-slate-200';
         };
         const getRankWeight = (rank) => {
             if (!rank) return 0;
             if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 10000;
             if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 9000;
-            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Tempat Ketiga') return 8000;
-            if (rank.includes('四') || rank === '4th Place' || rank === 'Tempat Keempat') return 7000;
-            if (rank.includes('五') || rank === '5th Place' || rank === 'Tempat Kelima') return 6000;
+            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return 8000;
+            if (rank.includes('四') || rank === 'Fourth Place' || rank === 'Keempat') return 7000;
+            if (rank.includes('五') || rank === 'Fifth Place' || rank === 'Kelima') return 6000;
             if (rank.includes('优秀') || rank === 'Consolation' || rank === 'Saguhati') return 4000;
             return 1000;
         };
@@ -490,27 +489,6 @@
         };
         
         const getStudentsByClass = (className) => state.studentDB[className] || [];
-        
-        // 🏅 海报专属辅助函数 (Poster specific helpers)
-        const getRankEmoji = (rank) => {
-            if (!rank) return '🏅';
-            if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return '🏆';
-            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return '🥈';
-            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Tempat Ketiga') return '🥉';
-            if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return '🌟';
-            return '🏅';
-        };
-
-        const getRankGradient = (rank) => {
-            if (!rank) return 'from-indigo-400 to-blue-500';
-            if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'from-yellow-400 to-orange-500';
-            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 'from-slate-400 to-slate-500';
-            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Tempat Ketiga') return 'from-amber-500 to-orange-600';
-            if (rank.includes('四') || rank === 'Fourth Place' || rank === 'Tempat Keempat') return 'from-teal-400 to-emerald-500';
-            if (rank.includes('五') || rank === 'Fifth Place' || rank === 'Tempat Kelima') return 'from-cyan-400 to-blue-500';
-            if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return 'from-purple-500 to-pink-500';
-            return 'from-indigo-400 to-blue-500';
-        };
 
         // --- 4. 数据一致性衍生状态机 (Computed Properties) ---
         const getAvailableYears = () => {
@@ -697,14 +675,16 @@
         const fetchAllData = async (isBackground = false) => {
             if (isBackground) {
                 if (state.unsyncedQueue.length > 0 && !state.isOfflineMode) {
-                    app.syncQueueData(true); 
+                    app.syncQueueData(true);
                 }
+                
                 const isInteracting = state.isBatchEditing || 
                                       state.currentTab !== 'results' || 
                                       state.modals.score.visible || 
                                       state.modals.editCategory.visible || 
                                       state.modals.poster.visible || 
                                       state.modals.dialog.visible;
+                                      
                 if (isInteracting) return; 
             }
             
@@ -889,11 +869,17 @@
             state.batchEditData = JSON.parse(JSON.stringify(getSelectedGroupedByGrade()));
             state.historySnapshot = null;
             state.isBatchEditing = true;
+            state.showScoreColumn = false; // 默认折叠得分栏
             updateDOM();
             nextTick(() => { 
                 const firstInput = document.querySelector('.batch-score-input'); 
                 if (firstInput) { firstInput.focus(); firstInput.select(); } 
             });
+        };
+        
+        const toggleScoreColumn = (e) => {
+            state.showScoreColumn = e.target.checked;
+            updateDOM();
         };
 
         const cancelBatchEdit = () => {
@@ -986,7 +972,6 @@
             state.auditLog = [...updates, ...state.auditLog].slice(0, 50);
             localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
 
-            // 乐观更新
             updates.forEach(u => {
                 const target = state.dbResults.find(s => s.studentName === u.name && s.studentClass === u.stuClass && s.category === u.category);
                 if(target){ target.score = u.score; target.rank = u.rank; }
@@ -1018,6 +1003,7 @@
 
         const syncTeamScore = (indexStr) => {
             const el = document.getElementById(`batch-score-${indexStr}`);
+            if (!el) return;
             const val = el.value;
             const stu = findStudentInBatch(indexStr);
             if (!stu) return;
@@ -1040,6 +1026,7 @@
 
         const syncTeamRank = (indexStr) => {
             const el = document.getElementById(`batch-rank-${indexStr}`);
+            if (!el) return;
             const val = el.value;
             const stu = findStudentInBatch(indexStr);
             if (!stu) return;
@@ -1500,6 +1487,23 @@
             XLSX.writeFile(wb, `${state.selectedCategory}_成绩表.xlsx`);
         };
 
+        const getRankEmoji = (rank) => {
+            if (!rank) return '';
+            if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return '🏆';
+            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return '🥈';
+            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return '🥉';
+            if (rank.includes('优秀') || rank === 'Consolation' || rank === 'Saguhati') return '🎖️';
+            return '🏅';
+        };
+        
+        const getRankGradient = (rank) => {
+            if (!rank) return 'bg-slate-100 text-slate-700';
+            if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'bg-gradient-to-r from-yellow-100 to-amber-200 text-amber-900 border border-yellow-400';
+            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 'bg-gradient-to-r from-slate-100 to-slate-300 text-slate-800 border border-slate-400';
+            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-900 border border-orange-300';
+            return 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-800 border border-indigo-200';
+        };
+
         const openPosterModal = () => {
             const gradeGroups = getSelectedGroupedByGrade();
             const validGroups = [];
@@ -1559,7 +1563,7 @@
             state.modals.dialog.visible = false; 
             updateDOM();
         };
-
+        
         const showToast = (message, type = 'success') => {
             state.toast = { visible: true, message, type };
             updateDOM();
@@ -1698,7 +1702,6 @@
                                 <img src="https://raw.githubusercontent.com/chengyang365/ClassMovementLog/refs/heads/main/logo.png" alt="Logo" class="w-full h-full object-contain drop-shadow-lg group-hover:scale-105 transition-transform duration-300">
                                 ${isTestEnv ? '<div class="absolute -top-1 -right-2 bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow border border-white font-sans tracking-tighter">TEST</div>' : ''}
                             </div>
-                            <!-- 🛡️ 高柔性自适应双行标题渲染器 -->
                             ${state.lang === 'zh' ? `
                                 <div class="flex flex-col justify-center">
                                     <h1 class="text-xl sm:text-2xl font-bold leading-tight">${t('school_name_line1')}</h1>
@@ -1711,7 +1714,6 @@
                             `}
                         </div>
                         <div class="flex items-center space-x-3 text-sm font-bold">
-                            <!-- 离线未同步警示按钮 -->
                             ${state.unsyncedQueue.length > 0 ? `
                                 <button onclick="app.syncQueueData()" ${state.isSubmitting ? 'disabled' : ''} class="bg-amber-500 hover:bg-amber-400 text-white px-3 py-1.5 rounded-full font-bold shadow-md flex items-center transition active:scale-95 text-xs sm:text-sm animate-pulse disabled:opacity-50">
                                     <i class="fas fa-cloud-upload-alt mr-1.5"></i>
@@ -1726,12 +1728,10 @@
                     </div>
                 </nav>
 
-                <!-- 容器框架 -->
                 <main class="flex-grow container mx-auto px-4 py-6 max-w-5xl">
                     ${renderActiveTab()}
                 </main>
 
-                <!-- 挂载弹窗组件 -->
                 ${renderModals()}
             `;
 
@@ -1763,19 +1763,16 @@
                 return renderCategoryDetail();
             }
 
-            // 大厅主页面
             const yearsOptions = getAvailableYears().map(y => `<option value="${y}" ${state.selectedYear === y ? 'selected' : ''}>${y}</option>`).join('');
             
             return `
                 <div class="space-y-6">
-                    <!-- 顶部筛选与状态栏 -->
                     <div class="flex flex-col sm:flex-row gap-4 items-center justify-between no-print bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
                         <div class="flex items-center w-full sm:w-auto justify-between sm:justify-start gap-3">
                             <h2 class="text-xl font-bold text-slate-800 font-kai">
                                 <i class="fas fa-bullhorn text-indigo-500 mr-2"></i>${t('lobby_title')}
                             </h2>
 
-                            <!-- 在线状态指示器 -->
                             <div class="flex items-center text-xs px-3 py-1.5 rounded-full border font-bold ${state.isOfflineMode ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}">
                                 <span class="relative flex h-2 w-2 mr-2">
                                   ${!state.isOfflineMode && !state.isInitializing ? '<span class="bg-emerald-400 animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"></span>' : ''}
@@ -1786,7 +1783,6 @@
                         </div>
                         
                         <div class="flex items-center gap-2 w-full sm:w-auto">
-                            <!-- 年份归档器 -->
                             <div class="relative shadow-sm rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 flex items-center font-bold text-sm text-slate-700 flex-shrink-0">
                                 <i class="fas fa-calendar-alt mr-2 text-indigo-400"></i>
                                 <select onchange="app.changeYear(event)" class="outline-none bg-transparent appearance-none pr-4 cursor-pointer">
@@ -1795,14 +1791,12 @@
                                 <i class="fas fa-chevron-down absolute right-3 text-[10px] text-slate-400 pointer-events-none"></i>
                             </div>
 
-                            <!-- 搜索框 -->
                             <div class="relative flex-grow">
                                 <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                                 <input type="text" id="lobby-search" oninput="state.searchQuery = this.value; app.refreshData(true);" value="${state.searchQuery}" placeholder="${t('search_placeholder')}" 
                                     class="w-full border border-indigo-200 rounded-full pl-11 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition bg-white shadow-sm">
                             </div>
                             
-                            <!-- 语言切换与刷新 -->
                             <button onclick="app.toggleLang()" class="bg-slate-50 hover:bg-slate-100 text-indigo-600 px-3 py-2 rounded-xl flex items-center transition border border-slate-200 font-bold shadow-sm flex-shrink-0">
                                 <i class="fas fa-language text-lg"></i>
                             </button>
@@ -1870,7 +1864,6 @@
 
             return `
                 <div class="space-y-4">
-                    <!-- 筛选标签 -->
                     <div class="flex gap-2 overflow-x-auto pb-2 no-print custom-scrollbar">
                         <button onclick="app.changeFilter('all')" class="px-5 py-2 rounded-xl text-sm font-bold transition border whitespace-nowrap ${state.activeFilter === 'all' ? 'bg-indigo-600 text-white shadow-md border-transparent' : 'bg-white text-slate-600 hover:bg-slate-50 border-slate-200'}">${t('filter_all')}</button>
                         <button onclick="app.changeFilter('ongoing')" class="px-5 py-2 rounded-xl text-sm font-bold transition border whitespace-nowrap ${state.activeFilter === 'ongoing' ? 'bg-emerald-500 text-white shadow-md border-transparent' : 'bg-white text-slate-600 hover:bg-slate-50 border-slate-200'}"><i class="fas fa-play mr-1.5 opacity-70"></i>${t('filter_ongoing')}</button>
@@ -1902,10 +1895,21 @@
                                 <div>
                                     <h2 class="text-lg font-bold text-slate-800 font-kai leading-tight">${state.selectedCategory}</h2>
                                     <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
-                                        <span class="text-xs text-slate-500 bg-slate-200/60 px-2.5 py-0.5 rounded-md inline-block">
-                                            <i class="fas fa-building mr-1"></i> ${getSelectedGroupOrganizer() || 'SJK (C) Ladang Grisek'}
-                                        </span>
-                                        ${state.isBatchEditing ? `<span class="text-xs text-rose-500 font-bold animate-pulse inline-block">● ${t('mode_entry')}</span>` : ''}
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs text-slate-500 bg-slate-200/60 px-2.5 py-0.5 rounded-md inline-block">
+                                                <i class="fas fa-building mr-1"></i> ${getSelectedGroupOrganizer() || 'SJK (C) Ladang Grisek'}
+                                            </span>
+                                            ${state.isBatchEditing ? `<span class="text-xs text-rose-500 font-bold animate-pulse inline-block">● ${t('mode_entry')}</span>` : ''}
+                                        </div>
+                                        ${state.isBatchEditing ? `
+                                            <label class="flex items-center cursor-pointer bg-white border border-slate-200 px-2 py-1 rounded-md shadow-sm ml-0 sm:ml-2 w-max transition hover:bg-slate-50">
+                                                <div class="relative flex items-center">
+                                                    <input type="checkbox" onchange="app.toggleScoreColumn(event)" ${state.showScoreColumn ? 'checked' : ''} class="sr-only peer">
+                                                    <div class="w-7 h-4 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-500"></div>
+                                                </div>
+                                                <span class="ml-1.5 text-xs font-bold text-slate-600">录入分数</span>
+                                            </label>
+                                        ` : ''}
                                     </div>
                                 </div>
                             </div>
@@ -2090,11 +2094,18 @@
                     `).join('');
 
                     tableRows += `
-                        <tr class="bg-white hover:bg-indigo-50 transition border-b border-slate-50 last:border-0">
-                            <!-- 🛡️ 添加 bg-inherit / bg-white 防止左侧粘性头部滑动穿模 -->
-                            <td class="p-3.5 font-mono text-slate-500 text-sm font-bold sticky-col-left shadow-[2px_0_4px_-1px_rgba(0,0,0,0.05)] bg-inherit">${cls.className}</td>
-                            <td class="p-3.5 font-medium text-slate-800 text-sm break-words">${formatName(stu.studentName)}</td>
-                            <td class="p-2.5">
+                        <tr class="bg-white hover:bg-indigo-50/80 transition border-b border-slate-50 last:border-0 group">
+                            <!-- 🛡️ 班级列 Sticky: 左边距 0，宽度锁死 75px -->
+                            <td class="p-3.5 font-mono text-slate-500 text-sm font-bold sticky left-0 z-10 bg-inherit w-[75px] min-w-[75px] max-w-[75px] truncate border-r border-slate-100/50 group-hover:bg-indigo-50/80 transition">${cls.className}</td>
+                            
+                            <!-- 🛡️ 姓名列 Sticky: 左边距跟着班级走 75px，带右侧滑动边缘阴影 -->
+                            <td class="p-3.5 font-medium text-slate-800 text-sm sticky left-[75px] z-10 bg-inherit shadow-[4px_0_6px_-2px_rgba(0,0,0,0.05)] w-[160px] min-w-[160px] max-w-[160px] group-hover:bg-indigo-50/80 transition">
+                                <div class="line-clamp-2 leading-tight" title="${formatName(stu.studentName)}">${formatName(stu.studentName)}</div>
+                            </td>
+                            
+                            <!-- 🛡️ 条件渲染得分列 -->
+                            ${state.showScoreColumn ? `
+                            <td class="p-2.5 min-w-[120px]">
                                 <input type="number" step="0.1" inputmode="decimal" 
                                     id="batch-score-${stu.rowIndex}" 
                                     value="${stu.score || ''}" 
@@ -2103,10 +2114,12 @@
                                     class="batch-score-input w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono font-bold text-indigo-700 bg-white shadow-inner transition" 
                                     placeholder="-">
                             </td>
-                            <td class="p-2.5">
+                            ` : ''}
+                            
+                            <td class="p-2.5 min-w-[140px]">
                                 <select id="batch-rank-${stu.rowIndex}" 
                                     onchange="app.syncTeamRank('${stu.rowIndex}')" 
-                                    class="w-full border border-slate-300 rounded-lg px-2 py-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-700 font-medium transition">
+                                    class="w-full border border-slate-300 rounded-lg px-2 py-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-700 font-medium transition cursor-pointer">
                                     <option value="">- 无名次 -</option>
                                     ${selectOptions}
                                 </select>
@@ -2117,15 +2130,17 @@
             });
 
             return `
-                <div class="bg-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden">
+                <div class="bg-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden relative">
                     <div class="overflow-x-auto custom-scrollbar">
-                        <table class="w-full text-left border-collapse min-w-[600px]">
+                        <table class="w-full text-left border-collapse min-w-full">
                             <thead class="bg-indigo-50 text-indigo-800 text-xs uppercase font-bold tracking-wider sticky-table-header">
                                 <tr>
-                                    <th class="p-3.5 border-b border-indigo-100 w-20 sticky-col-left sticky-col-left-header bg-indigo-50">${t('th_class')}</th>
-                                    <th class="p-3.5 border-b border-indigo-100 w-48">${t('th_name')}</th>
-                                    <th class="p-3.5 border-b border-indigo-100 w-32 text-center bg-indigo-100/30">${t('th_score')}</th>
-                                    <th class="p-3.5 border-b border-indigo-100 w-40">${t('th_rank')}</th>
+                                    <!-- 🛡️ 表头班级列 Sticky -->
+                                    <th class="p-3.5 border-b border-indigo-200 w-[75px] min-w-[75px] max-w-[75px] sticky left-0 z-30 bg-indigo-50 border-r border-indigo-100/50">${t('th_class')}</th>
+                                    <!-- 🛡️ 表头姓名列 Sticky -->
+                                    <th class="p-3.5 border-b border-indigo-200 w-[160px] min-w-[160px] max-w-[160px] sticky left-[75px] z-30 bg-indigo-50 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.05)]">${t('th_name')}</th>
+                                    ${state.showScoreColumn ? `<th class="p-3.5 border-b border-indigo-200 min-w-[120px] text-center bg-indigo-100/30">${t('th_score')}</th>` : ''}
+                                    <th class="p-3.5 border-b border-indigo-200 min-w-[140px]">${t('th_rank')}</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
@@ -2143,35 +2158,31 @@
                 <option value="${i.name}" ${state.form.category === i.name ? 'selected' : ''}>${i.name}</option>
             `).join('');
 
+            const classOptions = state.classList.map(cls => `
+                <option value="${cls}">${cls}</option>
+            `).join('');
+
             const classGroupsHTML = state.form.groups.map((group, gIndex) => {
-                // 🛡️ 修复 1：将班级选项的生成移入循环，动态判断哪个班级被 selected
-                const classOptions = state.classList.map(cls => `
-                    <option value="${cls}" ${group.class === cls ? 'selected' : ''}>${cls}</option>
-                `).join('');
+                const studentsOptions = group.class ? getStudentsByClass(group.class).map(stu => `
+                    <option value="${stu}" ${group.students.includes(stu) ? 'selected' : ''}>${formatName(stu, true)}</option>
+                `).join('') : '';
 
-                const studentRows = group.students.map((stu, sIndex) => {
-                    // 🛡️ 修复 2：将学生选项的生成移入循环，动态判断哪个学生被 selected
-                    const studentsOptions = group.class ? getStudentsByClass(group.class).map(s => `
-                        <option value="${s}" ${stu === s ? 'selected' : ''}>${formatName(s, true)}</option>
-                    `).join('') : '';
-
-                    return `
-                        <div class="flex gap-2 items-center">
-                            <div class="relative flex-grow">
-                                <span class="absolute left-3 top-3.5 text-xs font-bold text-slate-400">${sIndex + 1}.</span>
-                                <select id="reg-student-${gIndex}-${sIndex}" onchange="app.updateStudentSelection(${gIndex}, ${sIndex}, this.value)" required class="w-full rounded-xl border border-emerald-200 pl-8 p-2.5 bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 transition shadow-sm">
-                                    <option value="" ${!stu ? 'selected' : ''}>${t('opt_empty')}</option>
-                                    ${studentsOptions}
-                                </select>
-                            </div>
-                            ${group.students.length > 1 ? `
-                                <button type="button" onclick="app.removeStudentRow(${gIndex}, ${sIndex})" class="text-slate-300 hover:text-rose-500 px-2 transition">
-                                    <i class="fas fa-minus-circle text-xl"></i>
-                                </button>
-                            ` : ''}
+                const studentRows = group.students.map((stu, sIndex) => `
+                    <div class="flex gap-2 items-center">
+                        <div class="relative flex-grow">
+                            <span class="absolute left-3 top-3.5 text-xs font-bold text-slate-400">${sIndex + 1}.</span>
+                            <select id="reg-student-${gIndex}-${sIndex}" onchange="app.updateStudentSelection(${gIndex}, ${sIndex}, this.value)" required class="w-full rounded-xl border border-emerald-200 pl-8 p-2.5 bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 transition shadow-sm">
+                                <option value="" ${!stu ? 'selected' : ''}>${t('opt_empty')}</option>
+                                ${studentsOptions}
+                            </select>
                         </div>
-                    `;
-                }).join('');
+                        ${group.students.length > 1 ? `
+                            <button type="button" onclick="app.removeStudentRow(${gIndex}, ${sIndex})" class="text-slate-300 hover:text-rose-500 px-2 transition">
+                                <i class="fas fa-minus-circle text-xl"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                `).join('');
 
                 return `
                     <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 relative shadow-sm">
@@ -2439,29 +2450,41 @@
             const m = state.modals.poster;
             if (!m.visible) return '';
 
+            const getRankEmoji = (rank) => {
+                if (!rank) return '';
+                if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return '🏆';
+                if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return '🥈';
+                if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return '🥉';
+                if (rank.includes('优秀') || rank === 'Consolation' || rank === 'Saguhati') return '🎖️';
+                return '🏅';
+            };
+            
+            const getRankGradient = (rank) => {
+                if (!rank) return 'bg-slate-100 text-slate-700';
+                if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'bg-gradient-to-r from-yellow-100 to-amber-200 text-amber-900 border border-yellow-400';
+                if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 'bg-gradient-to-r from-slate-100 to-slate-300 text-slate-800 border border-slate-400';
+                if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-900 border border-orange-300';
+                return 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-800 border border-indigo-200';
+            };
+
             const renderWinnersCol = (colData) => {
                 return colData.map(group => `
-                    <div class="mb-4">
-                        <div class="flex items-center mb-5 mt-2">
-                            <div class="h-1 bg-gradient-to-r from-transparent to-yellow-300 flex-grow rounded-l-full"></div>
-                            <span class="mx-4 bg-yellow-300 text-indigo-900 px-4 py-1.5 rounded-full font-black text-xl shadow-md">${group.translatedLabel}</span>
-                            <div class="h-1 bg-gradient-to-l from-transparent to-yellow-300 flex-grow rounded-r-full"></div>
+                    <div>
+                        <div class="flex items-center mb-5">
+                            <div class="h-[2px] bg-white/40 flex-grow"></div>
+                            <span class="mx-4 text-white font-bold text-xl drop-shadow-md tracking-wider">${group.translatedLabel}</span>
+                            <div class="h-[2px] bg-white/40 flex-grow"></div>
                         </div>
                         <div class="grid grid-cols-1 gap-4">
                             ${group.winners.map(stu => `
-                                <div class="poster-card px-5 py-4 rounded-2xl flex items-center justify-between relative overflow-hidden">
-                                    <div class="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-yellow-400 to-orange-500"></div>
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-2xl shadow-inner border border-indigo-100 flex-shrink-0">
-                                            ${getRankEmoji(stu.rank)}
-                                        </div>
-                                        <div>
-                                            <div class="text-indigo-950 font-black text-lg sm:text-xl leading-tight">${formatName(stu.studentName)}</div>
-                                            <div class="text-indigo-600/80 font-bold text-sm mt-0.5"><i class="fas fa-graduation-cap mr-1"></i>${stu.className}</div>
-                                        </div>
+                                <div class="poster-card px-5 py-4 rounded-2xl flex items-center justify-between group hover:scale-105 transition-transform duration-300">
+                                    <div class="flex flex-col">
+                                        <div class="text-indigo-950 font-black text-xl leading-tight font-kai tracking-wide">${formatName(stu.studentName)}</div>
+                                        <div class="text-slate-500 text-sm mt-1 font-bold"><i class="fas fa-graduation-cap text-indigo-300 mr-1.5"></i>${stu.className}</div>
                                     </div>
-                                    <div class="text-right pl-4 z-10">
-                                        <span class="inline-block bg-gradient-to-br ${getRankGradient(stu.rank)} text-white px-3.5 py-1.5 rounded-full text-sm font-black shadow-md whitespace-nowrap border border-white/50">${t_rank(stu.rank)}</span>
+                                    <div class="text-right flex items-center gap-2">
+                                        <span class="text-2xl drop-shadow-sm">${getRankEmoji(stu.rank)}</span>
+                                        <span class="inline-block ${getRankGradient(stu.rank)} px-3 py-1.5 rounded-full text-xs font-black whitespace-nowrap shadow-sm">${t_rank(stu.rank)}</span>
                                     </div>
                                 </div>
                             `).join('')}
@@ -2481,53 +2504,45 @@
                             <h3 class="font-bold text-lg font-kai tracking-wide"><i class="fas fa-image mr-2 text-indigo-400"></i>${t('poster_title')}</h3>
                             <button onclick="app.closePoster()" class="p-2 -mr-2 text-slate-400 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
-                        
                         <!-- Poster Body -->
                         <div class="overflow-auto p-4 sm:p-6 flex-grow bg-slate-100 flex justify-start sm:justify-center items-start">
-                            <div id="poster-container" class="poster-container min-w-[800px] w-[800px] p-12 relative shadow-2xl rounded-xl flex flex-col shrink-0 origin-top-left sm:origin-top bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 overflow-hidden">
+                            <div id="poster-container" class="poster-container min-w-[800px] w-[800px] p-12 relative shadow-2xl rounded-2xl flex flex-col shrink-0 origin-top-left sm:origin-top overflow-hidden">
                                 
-                                <!-- Lively Geometric Background for html2canvas compatibility -->
-                                <div class="absolute -top-20 -left-20 w-64 h-64 bg-white/10 rounded-full"></div>
-                                <div class="absolute top-10 right-10 w-24 h-24 bg-yellow-300/20 rounded-full"></div>
-                                <div class="absolute bottom-32 left-8 w-16 h-16 bg-white/20 rounded-full"></div>
-                                <div class="absolute -bottom-32 -right-32 w-80 h-80 bg-blue-400/20 rounded-full"></div>
-                                
-                                <!-- Academic & Lively Emojis -->
-                                <div class="absolute top-16 left-12 text-5xl opacity-30 transform -rotate-12">🎓</div>
-                                <div class="absolute bottom-24 left-16 text-6xl opacity-30 transform rotate-12">📚</div>
-                                <div class="absolute top-24 right-16 text-6xl opacity-40 transform rotate-45">🌟</div>
-                                <div class="absolute bottom-16 right-16 text-5xl opacity-30 transform -rotate-12">💡</div>
-                                <div class="absolute top-1/2 left-6 text-4xl opacity-30 transform -rotate-12">🚀</div>
-                                <div class="absolute top-1/3 right-8 text-5xl opacity-30 transform rotate-12">🎨</div>
+                                <!-- 活泼的学术漂浮背景元素 -->
+                                <div class="absolute top-10 left-10 text-white/20 text-6xl rotate-12">🎓</div>
+                                <div class="absolute top-20 right-16 text-white/20 text-5xl -rotate-12">💡</div>
+                                <div class="absolute bottom-32 left-16 text-white/20 text-7xl -rotate-45">🚀</div>
+                                <div class="absolute bottom-16 right-20 text-white/20 text-6xl rotate-45">🎨</div>
+                                <div class="absolute top-1/2 left-4 text-white/10 text-4xl">🌟</div>
+                                <div class="absolute top-1/3 right-8 text-white/10 text-5xl">📚</div>
 
-                                <div class="text-center mb-10 relative z-10 mt-4">
-                                    <div class="inline-block bg-white/20 backdrop-blur-sm px-6 py-2 rounded-full text-white text-sm sm:text-base tracking-[0.2em] font-bold border border-white/40 shadow-sm mb-4">
-                                        <i class="fas fa-school mr-2"></i>${t('school_name_line2')}
-                                    </div>
-                                    <h1 class="text-5xl sm:text-6xl font-black text-white mb-6 tracking-wider drop-shadow-md" style="text-shadow: 0 4px 10px rgba(0,0,0,0.2);">${state.selectedCategory}</h1>
-                                    <div class="inline-block bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500 text-indigo-900 border-[3px] border-white px-10 py-3 rounded-full font-black text-2xl shadow-xl transform -rotate-2">
+                                <!-- 角落装饰边框 -->
+                                <div class="absolute top-0 left-0 w-40 h-40 border-t-8 border-l-8 border-white/50 rounded-tl-3xl m-6"></div>
+                                <div class="absolute bottom-0 right-0 w-40 h-40 border-b-8 border-r-8 border-white/50 rounded-br-3xl m-6"></div>
+                                
+                                <div class="text-center mb-12 relative z-10">
+                                    <div class="text-indigo-100 text-xl mb-2 tracking-[0.3em] font-bold drop-shadow-md">${t('school_name_line2')}</div>
+                                    <h1 class="text-6xl font-black text-white mb-6 tracking-widest drop-shadow-lg" style="text-shadow: 0 4px 10px rgba(0,0,0,0.3);">${state.selectedCategory}</h1>
+                                    <div class="inline-block bg-white/95 text-indigo-900 px-8 py-2 rounded-full font-black text-2xl shadow-[0_4px_15px_rgba(0,0,0,0.2)] mt-2 border-2 border-indigo-100 backdrop-blur-md">
                                         ${t('poster_subtitle')}
                                     </div>
                                 </div>
 
-                                <div class="flex-grow relative z-10 flex gap-8 items-start justify-center min-h-[300px] mt-4">
-                                    <!-- Left -->
-                                    <div class="flex-1 flex flex-col space-y-6">
+                                <div class="flex-grow relative z-10 flex gap-10 items-start justify-center min-h-[300px] px-8">
+                                    <div class="flex-1 flex flex-col space-y-8">
                                         ${leftHTML}
                                     </div>
                                     
-                                    <!-- 中间分割线 -->
-                                    ${(m.left.length && m.right.length) ? `<div class="w-[3px] bg-white/30 self-stretch rounded-full"></div>` : ''}
+                                    ${(m.left.length && m.right.length) ? `<div class="w-[3px] bg-white/30 self-stretch rounded-full shadow-inner"></div>` : ''}
                                     
-                                    <!-- 右边部分 -->
-                                    <div class="flex-1 flex flex-col space-y-6">
+                                    <div class="flex-1 flex flex-col space-y-8">
                                         ${rightHTML}
                                     </div>
                                 </div>
                                 
-                                ${!hasWinners ? `<div class="absolute inset-0 flex items-center justify-center text-white/50 text-xl font-bold">${t('msg_no_winners')}</div>` : ''}
+                                ${!hasWinners ? `<div class="absolute inset-0 flex items-center justify-center text-white/50 text-2xl font-bold tracking-widest">${t('msg_no_winners')}</div>` : ''}
                                 
-                                <div class="text-center mt-12 text-white/60 font-bold text-xs tracking-wider">
+                                <div class="text-center mt-16 text-indigo-100/80 text-sm tracking-wider font-bold">
                                     ${t('school_name_line2')} · ${formatDate(new Date())}
                                 </div>
                             </div>
@@ -2611,6 +2626,7 @@
             syncTeamScore,
             syncTeamRank,
             focusNextBatchInput,
+            toggleScoreColumn,
             addClassGroup,
             removeClassGroup,
             addStudentRow,
