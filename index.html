@@ -42,16 +42,21 @@
         .loader-white { border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
+        /* 移动端表格粘性头部与防穿模加固 */
+        .sticky-table-header { position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .sticky-col-left { position: sticky; left: 0; z-index: 10; background-color: inherit; }
+        .sticky-col-left-header { z-index: 30; }
+
         .poster-container {
-            background: linear-gradient(135deg, #4f46e5 0%, #a855f7 50%, #ec4899 100%);
+            background: linear-gradient(135deg, #312e81 0%, #6366f1 50%, #ec4899 100%);
             color: #fff;
             font-family: "LXGW WenKai", serif;
         }
         .poster-card { 
-            background-color: rgba(255, 255, 255, 0.95); 
+            background: linear-gradient(to right, rgba(255,255,255,0.98), rgba(255,255,255,0.9)); 
             color: #333; 
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), inset 0 2px 4px rgba(255,255,255,0.5); 
-            border: 1px solid rgba(255,255,255,0.8);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08), inset 0 2px 0 rgba(255,255,255,0.8);
+            border: 1px solid rgba(255,255,255,0.5);
         }
         
         @media print { .no-print { display: none !important; } body { background: white; } }
@@ -89,7 +94,6 @@
             isAdmin: false,
             adminPwd: '',
             isBatchEditing: false,
-            showScoreColumn: false, // 🛡️ 是否显示分数录入栏（默认折叠）
             isOfflineMode: false,
             isGeneratingPoster: false,
             selectedYear: localStorage.getItem('app_selected_year') || currentYear,
@@ -104,7 +108,7 @@
             searchQuery: '',
             
             form: { category: '', isTeamBundle: false, groups: [] },
-            keepClassInfo: false, // 🛡️ 默认不勾选保留
+            keepClassInfo: false,
             
             adminForm: { name: '', organizer: '', startDate: '', endDate: '' },
             modals: {
@@ -113,7 +117,8 @@
                 poster: { visible: false, left: [], right: [] },
                 dialog: { visible: false, type: 'alert', title: '', message: '', inputValue: '', placeholder: '', icon: '', confirmText: null, showButtons: true, resolve: null }
             },
-            toast: { visible: false, message: '', type: 'success' }
+            toast: { visible: false, message: '', type: 'success' },
+            showScoreInput: false // 批量录分时控制是否显示得分列
         };
 
         // --- 2. 国际化翻译字典 (Translations) ---
@@ -140,7 +145,7 @@
                 btn_goto_add: "前往后台添加",
                 btn_back: "返回大厅",
                 label_organizer: "主办方",
-                mode_entry: "快捷录分模式",
+                mode_entry: "快捷录分中",
                 msg_no_records: "暂无参赛记录",
                 btn_go_register: "前往报名",
                 btn_batch_entry: "批量打分",
@@ -212,7 +217,8 @@
                 label_start_date: "开始日期",
                 label_end_date: "结束日期",
                 grade_1: "一年级", grade_2: "二年级", grade_3: "三年级", grade_4: "四年级", grade_5: "五年级", grade_6: "六年级",
-                rank_champ: "冠军", rank_runnerup: "亚军", rank_3rd: "季军", rank_4th: "第四名", rank_5th: "第五名", rank_excellence: "优秀奖"
+                rank_champ: "冠军", rank_runnerup: "亚军", rank_3rd: "季军", rank_4th: "第四名", rank_5th: "第五名",
+                rank_excellence: "优秀奖"
             },
             ms: {
                 school_name_line1: "Sistem Pengurusan Pertandingan Sekolah",
@@ -284,7 +290,7 @@
                 ph_organizer: "Penganjur (Pilihan)",
                 btn_add: "Tambah",
                 label_cloud_list: "Senarai Acara",
-                poster_title: "Senarai Pemenang",
+                poster_title: "Papan Kehormatan",
                 poster_subtitle: "🌟 Bintang Cemerlang · Detik Gemilang 🌟",
                 msg_no_winners: "Tiada pemenang",
                 btn_close: "Tutup",
@@ -308,7 +314,8 @@
                 label_start_date: "Tarikh Mula",
                 label_end_date: "Tarikh Tamat",
                 grade_1: "Tahun 1", grade_2: "Tahun 2", grade_3: "Tahun 3", grade_4: "Tahun 4", grade_5: "Tahun 5", grade_6: "Tahun 6",
-                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Tempat Ketiga", rank_4th: "Tempat Keempat", rank_5th: "Tempat Kelima", rank_excellence: "Saguhati"
+                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Ketiga", rank_4th: "Keempat", rank_5th: "Kelima",
+                rank_excellence: "Saguhati"
             },
             en: {
                 school_name_line1: "Intra-school Competition Management",
@@ -338,7 +345,7 @@
                 btn_batch_entry: "Batch Score",
                 btn_poster: "Poster",
                 btn_print_options: "Print",
-                btn_export_excel: "Export Excel",
+                btn_export_csv: "Export Excel",
                 print_roster: "Name List",
                 print_score_sheet: "Scoring Sheet",
                 print_winners: "Winners List",
@@ -380,7 +387,7 @@
                 ph_organizer: "Organizer (Opt)",
                 btn_add: "Create",
                 label_cloud_list: "Cloud Database",
-                poster_title: "Hall of Fame",
+                poster_title: "Honor Roll Poster",
                 poster_subtitle: "🌟 Bright Stars · Hall of Fame 🌟",
                 msg_no_winners: "No winners yet",
                 btn_close: "Close",
@@ -404,7 +411,8 @@
                 label_start_date: "Start Date",
                 label_end_date: "End Date",
                 grade_1: "Year 1", grade_2: "Year 2", grade_3: "Year 3", grade_4: "Year 4", grade_5: "Year 5", grade_6: "Year 6",
-                rank_champ: "Champion", rank_runnerup: "1st Runner-up", rank_3rd: "2nd Runner-up", rank_4th: "Fourth Place", rank_5th: "Fifth Place", rank_excellence: "Consolation"
+                rank_champ: "Champion", rank_runnerup: "1st Runner-up", rank_3rd: "2nd Runner-up", rank_4th: "Fourth Place", rank_5th: "Fifth Place",
+                rank_excellence: "Consolation"
             }
         };
 
@@ -416,7 +424,8 @@
             if (!dbValue) return '';
             const map = {
                 '冠军': 'rank_champ', '亚军': 'rank_runnerup', '季军': 'rank_3rd',
-                '第四名': 'rank_4th', '第五名': 'rank_5th', '优秀奖': 'rank_excellence'
+                '第四名': 'rank_4th', '第五名': 'rank_5th',
+                '优秀奖': 'rank_excellence'
             };
             return map[dbValue] ? t(map[dbValue]) : dbValue;
         };
@@ -463,7 +472,7 @@
             if (rank.includes('四') || rank === 'Fourth Place' || rank === 'Keempat') return 'bg-teal-100 text-teal-700 border border-teal-300';
             if (rank.includes('五') || rank === 'Fifth Place' || rank === 'Kelima') return 'bg-cyan-100 text-cyan-700 border border-cyan-300';
             if (rank.includes('优秀') || rank === 'Consolation' || rank === 'Saguhati') return 'bg-indigo-50 text-indigo-600 border border-indigo-200';
-            return 'bg-slate-100 text-slate-600 border border-slate-200';
+            return 'bg-slate-50 text-slate-600 border border-slate-200';
         };
         const getRankWeight = (rank) => {
             if (!rank) return 0;
@@ -674,24 +683,12 @@
 
         const fetchAllData = async (isBackground = false) => {
             if (isBackground) {
-                if (state.unsyncedQueue.length > 0 && !state.isOfflineMode) {
-                    app.syncQueueData(true);
-                }
-                
-                const isInteracting = state.isBatchEditing || 
-                                      state.currentTab !== 'results' || 
-                                      state.modals.score.visible || 
-                                      state.modals.editCategory.visible || 
-                                      state.modals.poster.visible || 
-                                      state.modals.dialog.visible;
-                                      
+                if (state.unsyncedQueue.length > 0 && !state.isOfflineMode) app.syncQueueData(true);
+                const isInteracting = state.isBatchEditing || state.currentTab !== 'results' || state.modals.score.visible || state.modals.editCategory.visible || state.modals.poster.visible || state.modals.dialog.visible;
                 if (isInteracting) return; 
             }
             
-            if (!isBackground) {
-                state.isRefreshing = true;
-                updateDOM();
-            }
+            if (!isBackground) { state.isRefreshing = true; updateDOM(); }
             try {
                 const items = await fetchAPI('getCompetitions');
                 if(!state.isOfflineMode) {
@@ -719,15 +716,10 @@
                         state.unsyncedQueue.forEach(pending => {
                             if (pending.action === 'SCORE' || pending.action === 'updateScore') {
                                 const target = serverResults.find(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
-                                if (target) {
-                                    target.score = pending.score;
-                                    target.rank = pending.rank;
-                                }
+                                if (target) { target.score = pending.score; target.rank = pending.rank; }
                             } else if (pending.action === 'REG' || pending.action === 'register') {
                                 const exists = serverResults.some(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
-                                if (!exists) {
-                                    serverResults.push({ studentName: pending.name, studentClass: pending.stuClass, category: pending.category, score: '', rank: '', rowIndex: `pending-${pending.id}` });
-                                }
+                                if (!exists) { serverResults.push({ studentName: pending.name, studentClass: pending.stuClass, category: pending.category, score: '', rank: '', rowIndex: `pending-${pending.id}` }); }
                             } else if (pending.action === 'DEL') {
                                 serverResults = serverResults.filter(s => !(s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === state.selectedCategory));
                             }
@@ -736,17 +728,13 @@
                     state.dbResults = serverResults;
                 }
             } catch (e) {
-                if (!isBackground) {
-                   state.competitionItems = initItemsFromStorage();
-                }
+                if (!isBackground) state.competitionItems = initItemsFromStorage();
             } finally {
                 state.isInitializing = false;
                 state.isRefreshing = false;
-                
                 localStorage.setItem('school_comp_items_v2', JSON.stringify(state.competitionItems));
                 localStorage.setItem('school_comp_students_v2', JSON.stringify(state.studentDB));
                 localStorage.setItem('school_comp_results_v2', JSON.stringify(state.dbResults));
-                
                 updateDOM();
             }
         };
@@ -772,10 +760,7 @@
                     const logItem = state.auditLog.find(l => l.id === item.id);
                     if (logItem) logItem.syncStatus = 'synced';
                     successCount++;
-                } catch (e) {
-                    console.error("同步队列被异常阻断:", e);
-                    break; 
-                }
+                } catch (e) { console.error("同步阻断:", e); break; }
             }
             
             state.unsyncedQueue = remaining;
@@ -786,7 +771,6 @@
             
             if (!silent && successCount > 0) showToast(`🎉 成功安全上云补传了 ${successCount} 条数据！`);
             if (!silent && remaining.length > 0) showToast(`仍有 ${remaining.length} 条数据未能同步。`, 'error');
-            
             fetchAllData(silent);
         };
 
@@ -864,21 +848,17 @@
             updateDOM();
         };
 
+        const toggleScoreInput = () => {
+            state.showScoreInput = !state.showScoreInput;
+            updateDOM();
+        };
+
         // --- 批量评分与时光回溯 (Batch Edit with Snapshot Undo) ---
         const startBatchEdit = async () => {
             state.batchEditData = JSON.parse(JSON.stringify(getSelectedGroupedByGrade()));
             state.historySnapshot = null;
             state.isBatchEditing = true;
-            state.showScoreColumn = false; // 默认折叠得分栏
-            updateDOM();
-            nextTick(() => { 
-                const firstInput = document.querySelector('.batch-score-input'); 
-                if (firstInput) { firstInput.focus(); firstInput.select(); } 
-            });
-        };
-        
-        const toggleScoreColumn = (e) => {
-            state.showScoreColumn = e.target.checked;
+            state.showScoreInput = false; 
             updateDOM();
         };
 
@@ -893,7 +873,7 @@
             if (state.historySnapshot) {
                 state.batchEditData = JSON.parse(JSON.stringify(state.historySnapshot));
                 state.historySnapshot = null;
-                showToast('✅ 时光倒流成功，已撤销到自动排名前的原始分数状态！');
+                showToast('✅ 时光倒流成功，已撤销到自动排名前的原始状态！');
                 updateDOM();
             }
         };
@@ -972,6 +952,7 @@
             state.auditLog = [...updates, ...state.auditLog].slice(0, 50);
             localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
 
+            // 乐观更新
             updates.forEach(u => {
                 const target = state.dbResults.find(s => s.studentName === u.name && s.studentClass === u.stuClass && s.category === u.category);
                 if(target){ target.score = u.score; target.rank = u.rank; }
@@ -1003,7 +984,7 @@
 
         const syncTeamScore = (indexStr) => {
             const el = document.getElementById(`batch-score-${indexStr}`);
-            if (!el) return;
+            if(!el) return;
             const val = el.value;
             const stu = findStudentInBatch(indexStr);
             if (!stu) return;
@@ -1026,7 +1007,6 @@
 
         const syncTeamRank = (indexStr) => {
             const el = document.getElementById(`batch-rank-${indexStr}`);
-            if (!el) return;
             const val = el.value;
             const stu = findStudentInBatch(indexStr);
             if (!stu) return;
@@ -1097,6 +1077,7 @@
 
         const updateStudentSelection = (gIndex, sIndex, value) => {
             state.form.groups[gIndex].students[sIndex] = value;
+            updateDOM();
         };
 
         const toggleTeamBundle = (checked) => {
@@ -1487,23 +1468,6 @@
             XLSX.writeFile(wb, `${state.selectedCategory}_成绩表.xlsx`);
         };
 
-        const getRankEmoji = (rank) => {
-            if (!rank) return '';
-            if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return '🏆';
-            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return '🥈';
-            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return '🥉';
-            if (rank.includes('优秀') || rank === 'Consolation' || rank === 'Saguhati') return '🎖️';
-            return '🏅';
-        };
-        
-        const getRankGradient = (rank) => {
-            if (!rank) return 'bg-slate-100 text-slate-700';
-            if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'bg-gradient-to-r from-yellow-100 to-amber-200 text-amber-900 border border-yellow-400';
-            if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 'bg-gradient-to-r from-slate-100 to-slate-300 text-slate-800 border border-slate-400';
-            if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-900 border border-orange-300';
-            return 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-800 border border-indigo-200';
-        };
-
         const openPosterModal = () => {
             const gradeGroups = getSelectedGroupedByGrade();
             const validGroups = [];
@@ -1534,21 +1498,38 @@
             if (!el) return;
             state.isGeneratingPoster = true;
             updateDOM();
+            
+            const originalWidth = el.style.width;
+            const originalHeight = el.style.height;
+            const originalTransform = el.style.transform;
+            el.style.width = '1200px';
+            el.style.height = 'auto';
+            el.style.transform = 'none';
+
             setTimeout(() => {
-                html2canvas(el, { scale: 2, useCORS: true, backgroundColor: null }).then(canvas => {
+                html2canvas(el, { 
+                    scale: window.devicePixelRatio > 1 ? 2 : 1.5, 
+                    useCORS: true, 
+                    backgroundColor: null,
+                    logging: false,
+                    allowTaint: true,
+                    windowWidth: 1200
+                }).then(canvas => {
                     const link = document.createElement('a');
                     link.download = `${state.selectedCategory || '比赛'}_荣誉榜.png`;
-                    link.href = canvas.toDataURL('image/png'); 
+                    link.href = canvas.toDataURL('image/png', 0.9); 
                     link.click();
-                    state.isGeneratingPoster = false;
-                    updateDOM();
                 }).catch(e => { 
                     console.error(e); 
-                    showToast('生成海报失败', 'error'); 
-                    state.isGeneratingPoster = false; 
+                    showToast('生成海报失败，可能是设备内存或字体加载跨域限制', 'error'); 
+                }).finally(() => {
+                    el.style.width = originalWidth;
+                    el.style.height = originalHeight;
+                    el.style.transform = originalTransform;
+                    state.isGeneratingPoster = false;
                     updateDOM();
                 });
-            }, 100);
+            }, 800);
         };
 
         const closePoster = () => {
@@ -1728,10 +1709,12 @@
                     </div>
                 </nav>
 
+                <!-- 容器框架 -->
                 <main class="flex-grow container mx-auto px-4 py-6 max-w-5xl">
                     ${renderActiveTab()}
                 </main>
 
+                <!-- 挂载弹窗组件 -->
                 ${renderModals()}
             `;
 
@@ -1748,20 +1731,14 @@
         };
 
         const renderActiveTab = () => {
-            if (state.currentTab === 'results') {
-                return renderResultsTab();
-            } else if (state.currentTab === 'register') {
-                return renderRegisterTab();
-            } else if (state.currentTab === 'admin') {
-                return renderAdminTab();
-            }
+            if (state.currentTab === 'results') return renderResultsTab();
+            else if (state.currentTab === 'register') return renderRegisterTab();
+            else if (state.currentTab === 'admin') return renderAdminTab();
             return '';
         };
 
         const renderResultsTab = () => {
-            if (state.selectedCategory) {
-                return renderCategoryDetail();
-            }
+            if (state.selectedCategory) return renderCategoryDetail();
 
             const yearsOptions = getAvailableYears().map(y => `<option value="${y}" ${state.selectedYear === y ? 'selected' : ''}>${y}</option>`).join('');
             
@@ -1772,7 +1749,6 @@
                             <h2 class="text-xl font-bold text-slate-800 font-kai">
                                 <i class="fas fa-bullhorn text-indigo-500 mr-2"></i>${t('lobby_title')}
                             </h2>
-
                             <div class="flex items-center text-xs px-3 py-1.5 rounded-full border font-bold ${state.isOfflineMode ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}">
                                 <span class="relative flex h-2 w-2 mr-2">
                                   ${!state.isOfflineMode && !state.isInitializing ? '<span class="bg-emerald-400 animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"></span>' : ''}
@@ -1885,7 +1861,6 @@
 
             return `
                 <div class="space-y-6">
-                    <!-- 吸顶的操作栏 -->
                     <div class="sticky top-[60px] z-30 bg-slate-50/95 backdrop-blur-md pt-3 pb-3 px-4 sm:rounded-2xl shadow-sm border border-indigo-100 no-print flex flex-col gap-3">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center">
@@ -1895,25 +1870,14 @@
                                 <div>
                                     <h2 class="text-lg font-bold text-slate-800 font-kai leading-tight">${state.selectedCategory}</h2>
                                     <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-xs text-slate-500 bg-slate-200/60 px-2.5 py-0.5 rounded-md inline-block">
-                                                <i class="fas fa-building mr-1"></i> ${getSelectedGroupOrganizer() || 'SJK (C) Ladang Grisek'}
-                                            </span>
-                                            ${state.isBatchEditing ? `<span class="text-xs text-rose-500 font-bold animate-pulse inline-block">● ${t('mode_entry')}</span>` : ''}
-                                        </div>
-                                        ${state.isBatchEditing ? `
-                                            <label class="flex items-center cursor-pointer bg-white border border-slate-200 px-2 py-1 rounded-md shadow-sm ml-0 sm:ml-2 w-max transition hover:bg-slate-50">
-                                                <div class="relative flex items-center">
-                                                    <input type="checkbox" onchange="app.toggleScoreColumn(event)" ${state.showScoreColumn ? 'checked' : ''} class="sr-only peer">
-                                                    <div class="w-7 h-4 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-500"></div>
-                                                </div>
-                                                <span class="ml-1.5 text-xs font-bold text-slate-600">录入分数</span>
-                                            </label>
-                                        ` : ''}
+                                        <span class="text-xs text-slate-500 bg-slate-200/60 px-2.5 py-0.5 rounded-md inline-block">
+                                            <i class="fas fa-building mr-1"></i> ${getSelectedGroupOrganizer() || 'SJK (C) Ladang Grisek'}
+                                        </span>
+                                        ${state.isBatchEditing ? `<span class="text-xs text-rose-500 font-bold animate-pulse inline-block">● ${t('mode_entry')}</span>` : ''}
                                     </div>
                                 </div>
                             </div>
-                            <div class="text-sm bg-indigo-100 border border-indigo-200 text-indigo-700 px-3.5 py-1 rounded-full font-bold shadow-inner">
+                            <div class="text-sm bg-indigo-100 border border-indigo-200 text-indigo-700 px-3.5 py-1 rounded-full font-bold shadow-inner flex items-center">
                                 ${getSelectedGroupCount()} ${t('unit_person')}
                             </div>
                         </div>
@@ -1942,6 +1906,19 @@
                                 <button onclick="app.goToRegister(decodeURIComponent('${encodeURIComponent(state.selectedCategory)}'))" ${getCategoryStatus(state.selectedCategory) !== 'open' ? 'disabled' : ''} class="${getCategoryStatus(state.selectedCategory) !== 'open' ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-md'} text-white px-4 sm:px-5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center transition">
                                     <i class="fas fa-plus-circle mr-1 sm:mr-2"></i> ${t('btn_add_reg')}
                                 </button>
+                            </div>
+                        ` : ''}
+
+                        ${state.isBatchEditing ? `
+                            <div class="flex items-center justify-end w-full pb-2">
+                                <label class="flex items-center cursor-pointer">
+                                    <div class="relative">
+                                        <input type="checkbox" onchange="app.toggleScoreInput()" ${state.showScoreInput ? 'checked' : ''} class="sr-only">
+                                        <div class="block bg-slate-200 w-10 h-6 rounded-full transition-colors ${state.showScoreInput ? 'bg-indigo-500' : ''}"></div>
+                                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${state.showScoreInput ? 'transform translate-x-4' : ''}"></div>
+                                    </div>
+                                    <div class="ml-2 text-sm font-bold text-slate-600">展示分数栏</div>
+                                </label>
                             </div>
                         ` : ''}
                     </div>
@@ -2094,32 +2071,26 @@
                     `).join('');
 
                     tableRows += `
-                        <tr class="bg-white hover:bg-indigo-50/80 transition border-b border-slate-50 last:border-0 group">
-                            <!-- 🛡️ 班级列 Sticky: 左边距 0，宽度锁死 75px -->
-                            <td class="p-3.5 font-mono text-slate-500 text-sm font-bold sticky left-0 z-10 bg-inherit w-[75px] min-w-[75px] max-w-[75px] truncate border-r border-slate-100/50 group-hover:bg-indigo-50/80 transition">${cls.className}</td>
-                            
-                            <!-- 🛡️ 姓名列 Sticky: 左边距跟着班级走 75px，带右侧滑动边缘阴影 -->
-                            <td class="p-3.5 font-medium text-slate-800 text-sm sticky left-[75px] z-10 bg-inherit shadow-[4px_0_6px_-2px_rgba(0,0,0,0.05)] w-[160px] min-w-[160px] max-w-[160px] group-hover:bg-indigo-50/80 transition">
-                                <div class="line-clamp-2 leading-tight" title="${formatName(stu.studentName)}">${formatName(stu.studentName)}</div>
+                        <tr class="bg-white hover:bg-indigo-50 transition border-b border-slate-50 last:border-0 group">
+                            <td class="p-3.5 font-mono text-slate-500 text-sm font-bold sticky-col-left shadow-[2px_0_4px_-1px_rgba(0,0,0,0.05)] bg-white w-20">${cls.className}</td>
+                            <td class="p-3.5 font-medium text-slate-800 text-sm sticky-col-left shadow-[2px_0_4px_-1px_rgba(0,0,0,0.05)] bg-white left-[76px] w-48">
+                                <div class="line-clamp-2">${formatName(stu.studentName)}</div>
                             </td>
-                            
-                            <!-- 🛡️ 条件渲染得分列 -->
-                            ${state.showScoreColumn ? `
-                            <td class="p-2.5 min-w-[120px]">
-                                <input type="number" step="0.1" inputmode="decimal" 
-                                    id="batch-score-${stu.rowIndex}" 
-                                    value="${stu.score || ''}" 
-                                    oninput="app.syncTeamScore('${stu.rowIndex}')" 
-                                    onkeyup="if(event.key==='Enter') app.focusNextBatchInput(event)" 
-                                    class="batch-score-input w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono font-bold text-indigo-700 bg-white shadow-inner transition" 
-                                    placeholder="-">
-                            </td>
+                            ${state.showScoreInput ? `
+                                <td class="p-2.5 w-32">
+                                    <input type="number" step="0.1" inputmode="decimal" 
+                                        id="batch-score-${stu.rowIndex}" 
+                                        value="${stu.score || ''}" 
+                                        oninput="app.syncTeamScore('${stu.rowIndex}')" 
+                                        onkeyup="if(event.key==='Enter') app.focusNextBatchInput(event)" 
+                                        class="batch-score-input w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono font-bold text-indigo-700 bg-white shadow-inner transition" 
+                                        placeholder="-">
+                                </td>
                             ` : ''}
-                            
-                            <td class="p-2.5 min-w-[140px]">
+                            <td class="p-2.5 w-40">
                                 <select id="batch-rank-${stu.rowIndex}" 
                                     onchange="app.syncTeamRank('${stu.rowIndex}')" 
-                                    class="w-full border border-slate-300 rounded-lg px-2 py-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-700 font-medium transition cursor-pointer">
+                                    class="w-full border border-slate-300 rounded-lg px-2 py-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-700 font-medium transition">
                                     <option value="">- 无名次 -</option>
                                     ${selectOptions}
                                 </select>
@@ -2130,17 +2101,15 @@
             });
 
             return `
-                <div class="bg-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden relative">
+                <div class="bg-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden mb-6 relative">
                     <div class="overflow-x-auto custom-scrollbar">
-                        <table class="w-full text-left border-collapse min-w-full">
+                        <table class="w-full text-left border-collapse min-w-[${state.showScoreInput ? '600px' : '450px'}]">
                             <thead class="bg-indigo-50 text-indigo-800 text-xs uppercase font-bold tracking-wider sticky-table-header">
                                 <tr>
-                                    <!-- 🛡️ 表头班级列 Sticky -->
-                                    <th class="p-3.5 border-b border-indigo-200 w-[75px] min-w-[75px] max-w-[75px] sticky left-0 z-30 bg-indigo-50 border-r border-indigo-100/50">${t('th_class')}</th>
-                                    <!-- 🛡️ 表头姓名列 Sticky -->
-                                    <th class="p-3.5 border-b border-indigo-200 w-[160px] min-w-[160px] max-w-[160px] sticky left-[75px] z-30 bg-indigo-50 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.05)]">${t('th_name')}</th>
-                                    ${state.showScoreColumn ? `<th class="p-3.5 border-b border-indigo-200 min-w-[120px] text-center bg-indigo-100/30">${t('th_score')}</th>` : ''}
-                                    <th class="p-3.5 border-b border-indigo-200 min-w-[140px]">${t('th_rank')}</th>
+                                    <th class="p-3.5 border-b border-indigo-100 w-20 sticky-col-left sticky-col-left-header bg-indigo-50">${t('th_class')}</th>
+                                    <th class="p-3.5 border-b border-indigo-100 w-48 sticky-col-left sticky-col-left-header bg-indigo-50 left-[76px]">${t('th_name')}</th>
+                                    ${state.showScoreInput ? `<th class="p-3.5 border-b border-indigo-100 w-32 text-center bg-indigo-100/30">${t('th_score')}</th>` : ''}
+                                    <th class="p-3.5 border-b border-indigo-100 w-40">${t('th_rank')}</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
@@ -2158,31 +2127,36 @@
                 <option value="${i.name}" ${state.form.category === i.name ? 'selected' : ''}>${i.name}</option>
             `).join('');
 
-            const classOptions = state.classList.map(cls => `
-                <option value="${cls}">${cls}</option>
-            `).join('');
-
             const classGroupsHTML = state.form.groups.map((group, gIndex) => {
-                const studentsOptions = group.class ? getStudentsByClass(group.class).map(stu => `
-                    <option value="${stu}" ${group.students.includes(stu) ? 'selected' : ''}>${formatName(stu, true)}</option>
-                `).join('') : '';
-
-                const studentRows = group.students.map((stu, sIndex) => `
-                    <div class="flex gap-2 items-center">
-                        <div class="relative flex-grow">
-                            <span class="absolute left-3 top-3.5 text-xs font-bold text-slate-400">${sIndex + 1}.</span>
-                            <select id="reg-student-${gIndex}-${sIndex}" onchange="app.updateStudentSelection(${gIndex}, ${sIndex}, this.value)" required class="w-full rounded-xl border border-emerald-200 pl-8 p-2.5 bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 transition shadow-sm">
-                                <option value="" ${!stu ? 'selected' : ''}>${t('opt_empty')}</option>
-                                ${studentsOptions}
-                            </select>
-                        </div>
-                        ${group.students.length > 1 ? `
-                            <button type="button" onclick="app.removeStudentRow(${gIndex}, ${sIndex})" class="text-slate-300 hover:text-rose-500 px-2 transition">
-                                <i class="fas fa-minus-circle text-xl"></i>
-                            </button>
-                        ` : ''}
-                    </div>
+                
+                // 🛡️ 修复 1：在组循环内动态生成包含 selected 属性的班级选项
+                const classOptions = state.classList.map(cls => `
+                    <option value="${cls}" ${group.class === cls ? 'selected' : ''}>${cls}</option>
                 `).join('');
+
+                const studentRows = group.students.map((currentStu, sIndex) => {
+                    // 🛡️ 修复 2：在学生行循环内独立生成包含 selected 的下拉列表，防止同组多学生串线
+                    const studentDropdownOptions = group.class ? getStudentsByClass(group.class).map(dbStu => `
+                        <option value="${dbStu}" ${currentStu === dbStu ? 'selected' : ''}>${formatName(dbStu, true)}</option>
+                    `).join('') : '';
+
+                    return `
+                        <div class="flex gap-2 items-center">
+                            <div class="relative flex-grow">
+                                <span class="absolute left-3 top-3.5 text-xs font-bold text-slate-400">${sIndex + 1}.</span>
+                                <select id="reg-student-${gIndex}-${sIndex}" onchange="app.updateStudentSelection(${gIndex}, ${sIndex}, this.value)" required class="w-full rounded-xl border border-emerald-200 pl-8 p-2.5 bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 transition shadow-sm">
+                                    <option value="" ${!currentStu ? 'selected' : ''}>${t('opt_empty')}</option>
+                                    ${studentDropdownOptions}
+                                </select>
+                            </div>
+                            ${group.students.length > 1 ? `
+                                <button type="button" onclick="app.removeStudentRow(${gIndex}, ${sIndex})" class="text-slate-300 hover:text-rose-500 px-2 transition">
+                                    <i class="fas fa-minus-circle text-xl"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('');
 
                 return `
                     <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 relative shadow-sm">
@@ -2192,7 +2166,6 @@
                             </button>
                         ` : ''}
 
-                        <!-- 🏆 队伍名称输入框 -->
                         ${state.form.isTeamBundle ? `
                             <div class="mb-5 border-b border-slate-200 pb-5">
                                 <label class="block text-sm font-bold text-indigo-900 mb-2.5">${t('label_team_name')}</label>
@@ -2254,7 +2227,6 @@
                             </select>
                         </div>
 
-                        <!-- 🏆 团队绑定模式开关 -->
                         <div class="bg-indigo-50/70 p-4 rounded-2xl flex items-center justify-between border border-indigo-100 shadow-sm">
                             <div>
                                 <div class="font-bold text-indigo-900 text-sm"><i class="fas fa-link mr-1.5 text-indigo-500"></i> ${t('chk_team_bundle')}</div>
@@ -2266,7 +2238,6 @@
                             </label>
                         </div>
 
-                        <!-- 班级动态组件 -->
                         <div class="space-y-4">
                             ${classGroupsHTML}
                         </div>
@@ -2455,36 +2426,38 @@
                 if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return '🏆';
                 if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return '🥈';
                 if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return '🥉';
-                if (rank.includes('优秀') || rank === 'Consolation' || rank === 'Saguhati') return '🎖️';
+                if (rank.includes('特优') || rank === 'Distinction' || rank === 'Cemerlang') return '🌟';
                 return '🏅';
             };
-            
+
             const getRankGradient = (rank) => {
-                if (!rank) return 'bg-slate-100 text-slate-700';
-                if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'bg-gradient-to-r from-yellow-100 to-amber-200 text-amber-900 border border-yellow-400';
-                if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 'bg-gradient-to-r from-slate-100 to-slate-300 text-slate-800 border border-slate-400';
-                if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-900 border border-orange-300';
-                return 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-800 border border-indigo-200';
+                if (!rank) return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                if (rank.includes('冠') || rank === 'Champion' || rank === 'Johan') return 'bg-gradient-to-r from-yellow-200 to-amber-400 text-yellow-900 border-yellow-300';
+                if (rank.includes('亚') || rank === '1st Runner-up' || rank === 'Naib Johan') return 'bg-gradient-to-r from-slate-200 to-slate-400 text-slate-800 border-slate-300';
+                if (rank.includes('季') || rank === '2nd Runner-up' || rank === 'Ketiga') return 'bg-gradient-to-r from-orange-200 to-amber-500 text-orange-950 border-orange-300';
+                return 'bg-indigo-50 text-indigo-700 border-indigo-200';
             };
 
             const renderWinnersCol = (colData) => {
                 return colData.map(group => `
-                    <div>
-                        <div class="flex items-center mb-5">
-                            <div class="h-[2px] bg-white/40 flex-grow"></div>
-                            <span class="mx-4 text-white font-bold text-xl drop-shadow-md tracking-wider">${group.translatedLabel}</span>
-                            <div class="h-[2px] bg-white/40 flex-grow"></div>
+                    <div class="mb-5">
+                        <div class="flex items-center mb-3">
+                            <div class="h-[2px] bg-white/40 flex-grow rounded-l-full"></div>
+                            <span class="mx-3 text-white font-bold text-lg drop-shadow-md tracking-wider">${group.translatedLabel}</span>
+                            <div class="h-[2px] bg-white/40 flex-grow rounded-r-full"></div>
                         </div>
-                        <div class="grid grid-cols-1 gap-4">
+                        <div class="grid grid-cols-1 gap-2.5">
                             ${group.winners.map(stu => `
-                                <div class="poster-card px-5 py-4 rounded-2xl flex items-center justify-between group hover:scale-105 transition-transform duration-300">
-                                    <div class="flex flex-col">
-                                        <div class="text-indigo-950 font-black text-xl leading-tight font-kai tracking-wide">${formatName(stu.studentName)}</div>
-                                        <div class="text-slate-500 text-sm mt-1 font-bold"><i class="fas fa-graduation-cap text-indigo-300 mr-1.5"></i>${stu.className}</div>
+                                <div class="poster-card px-3.5 py-2.5 rounded-xl flex items-center justify-between transform transition hover:scale-105">
+                                    <div class="flex items-center flex-grow min-w-0 pr-3">
+                                        <div class="text-2xl mr-2.5 drop-shadow-sm">${getRankEmoji(stu.rank)}</div>
+                                        <div class="min-w-0">
+                                            <div class="text-slate-800 font-bold text-base leading-tight truncate">${formatName(stu.studentName)}</div>
+                                            <div class="text-slate-500 text-[11px] mt-0.5 font-medium tracking-wide">${stu.className}</div>
+                                        </div>
                                     </div>
-                                    <div class="text-right flex items-center gap-2">
-                                        <span class="text-2xl drop-shadow-sm">${getRankEmoji(stu.rank)}</span>
-                                        <span class="inline-block ${getRankGradient(stu.rank)} px-3 py-1.5 rounded-full text-xs font-black whitespace-nowrap shadow-sm">${t_rank(stu.rank)}</span>
+                                    <div class="text-right flex-shrink-0">
+                                        <span class="inline-block ${getRankGradient(stu.rank)} border px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide shadow-sm whitespace-nowrap">${t_rank(stu.rank)}</span>
                                     </div>
                                 </div>
                             `).join('')}
@@ -2499,50 +2472,49 @@
 
             return `
                 <div class="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm sm:p-4 no-print">
-                    <div class="bg-white sm:rounded-3xl shadow-2xl w-full h-full sm:h-auto max-w-5xl overflow-hidden flex flex-col max-h-full">
+                    <div class="bg-white sm:rounded-3xl shadow-2xl w-full h-full sm:h-auto max-w-[1000px] overflow-hidden flex flex-col max-h-full">
                         <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center shrink-0">
                             <h3 class="font-bold text-lg font-kai tracking-wide"><i class="fas fa-image mr-2 text-indigo-400"></i>${t('poster_title')}</h3>
                             <button onclick="app.closePoster()" class="p-2 -mr-2 text-slate-400 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
-                        <!-- Poster Body -->
+                        
                         <div class="overflow-auto p-4 sm:p-6 flex-grow bg-slate-100 flex justify-start sm:justify-center items-start">
-                            <div id="poster-container" class="poster-container min-w-[800px] w-[800px] p-12 relative shadow-2xl rounded-2xl flex flex-col shrink-0 origin-top-left sm:origin-top overflow-hidden">
+                            <div id="poster-container" class="poster-container min-w-[900px] w-[900px] p-8 pb-12 relative shadow-2xl rounded-2xl flex flex-col shrink-0 origin-top-left sm:origin-top overflow-hidden">
                                 
-                                <!-- 活泼的学术漂浮背景元素 -->
-                                <div class="absolute top-10 left-10 text-white/20 text-6xl rotate-12">🎓</div>
-                                <div class="absolute top-20 right-16 text-white/20 text-5xl -rotate-12">💡</div>
-                                <div class="absolute bottom-32 left-16 text-white/20 text-7xl -rotate-45">🚀</div>
-                                <div class="absolute bottom-16 right-20 text-white/20 text-6xl rotate-45">🎨</div>
-                                <div class="absolute top-1/2 left-4 text-white/10 text-4xl">🌟</div>
-                                <div class="absolute top-1/3 right-8 text-white/10 text-5xl">📚</div>
-
-                                <!-- 角落装饰边框 -->
-                                <div class="absolute top-0 left-0 w-40 h-40 border-t-8 border-l-8 border-white/50 rounded-tl-3xl m-6"></div>
-                                <div class="absolute bottom-0 right-0 w-40 h-40 border-b-8 border-r-8 border-white/50 rounded-br-3xl m-6"></div>
+                                <!-- 学术漂浮装饰 -->
+                                <div class="absolute top-10 left-12 text-white/20 text-5xl transform -rotate-12">🎓</div>
+                                <div class="absolute bottom-20 left-16 text-white/20 text-4xl transform rotate-12">📚</div>
+                                <div class="absolute top-24 right-16 text-white/20 text-6xl transform rotate-45">🚀</div>
+                                <div class="absolute bottom-16 right-20 text-white/20 text-5xl transform -rotate-12">💡</div>
+                                <div class="absolute top-1/2 left-8 text-white/10 text-3xl">🌟</div>
+                                <div class="absolute top-1/2 right-10 text-white/10 text-4xl">🎨</div>
                                 
-                                <div class="text-center mb-12 relative z-10">
-                                    <div class="text-indigo-100 text-xl mb-2 tracking-[0.3em] font-bold drop-shadow-md">${t('school_name_line2')}</div>
-                                    <h1 class="text-6xl font-black text-white mb-6 tracking-widest drop-shadow-lg" style="text-shadow: 0 4px 10px rgba(0,0,0,0.3);">${state.selectedCategory}</h1>
-                                    <div class="inline-block bg-white/95 text-indigo-900 px-8 py-2 rounded-full font-black text-2xl shadow-[0_4px_15px_rgba(0,0,0,0.2)] mt-2 border-2 border-indigo-100 backdrop-blur-md">
+                                <div class="absolute top-0 left-0 w-40 h-40 border-t-8 border-l-8 border-white/30 rounded-tl-3xl m-4"></div>
+                                <div class="absolute bottom-0 right-0 w-40 h-40 border-b-8 border-r-8 border-white/30 rounded-br-3xl m-4"></div>
+                                
+                                <div class="text-center mb-8 relative z-10">
+                                    <div class="text-white/80 text-lg mb-1.5 tracking-[0.25em] font-bold uppercase drop-shadow">${t('school_name_line2')}</div>
+                                    <h1 class="text-5xl font-black text-white mb-4 tracking-widest drop-shadow-lg" style="text-shadow: 0 4px 10px rgba(0,0,0,0.3);">${state.selectedCategory}</h1>
+                                    <div class="inline-block bg-white/10 backdrop-blur-md border border-white/40 text-white px-8 py-2 rounded-full font-bold text-xl shadow-lg mt-1 tracking-wider">
                                         ${t('poster_subtitle')}
                                     </div>
                                 </div>
 
-                                <div class="flex-grow relative z-10 flex gap-10 items-start justify-center min-h-[300px] px-8">
-                                    <div class="flex-1 flex flex-col space-y-8">
+                                <div class="flex-grow relative z-10 flex gap-6 items-start justify-center min-h-[300px] px-8">
+                                    <div class="flex-1 flex flex-col">
                                         ${leftHTML}
                                     </div>
                                     
-                                    ${(m.left.length && m.right.length) ? `<div class="w-[3px] bg-white/30 self-stretch rounded-full shadow-inner"></div>` : ''}
+                                    ${(m.left.length && m.right.length) ? `<div class="w-[2px] bg-white/20 self-stretch rounded-full mx-2 shadow-sm"></div>` : ''}
                                     
-                                    <div class="flex-1 flex flex-col space-y-8">
+                                    <div class="flex-1 flex flex-col">
                                         ${rightHTML}
                                     </div>
                                 </div>
                                 
                                 ${!hasWinners ? `<div class="absolute inset-0 flex items-center justify-center text-white/50 text-2xl font-bold tracking-widest">${t('msg_no_winners')}</div>` : ''}
                                 
-                                <div class="text-center mt-16 text-indigo-100/80 text-sm tracking-wider font-bold">
+                                <div class="absolute bottom-5 left-0 w-full text-center text-white/50 text-xs tracking-widest font-mono">
                                     ${t('school_name_line2')} · ${formatDate(new Date())}
                                 </div>
                             </div>
@@ -2618,6 +2590,7 @@
             changeYear,
             changeFilter,
             selectCategory,
+            toggleScoreInput,
             startBatchEdit,
             cancelBatchEdit,
             undoBatchEdit,
@@ -2626,7 +2599,6 @@
             syncTeamScore,
             syncTeamRank,
             focusNextBatchInput,
-            toggleScoreColumn,
             addClassGroup,
             removeClassGroup,
             addStudentRow,
