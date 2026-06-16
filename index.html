@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>新廊华小校内竞赛管理系统</title>
     
+    <!-- PWA 配置支持 -->
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -12,10 +13,12 @@
     <link type="image/png" rel="icon" sizes="32x32" href="https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png">
     <link rel="apple-touch-icon" href="https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png">
 
+    <!-- CSS 依赖 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.1.0/style.css" />
     
+    <!-- JS 依赖 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
@@ -65,7 +68,8 @@
 <body class="bg-slate-50 text-slate-800">
 
     <div id="app" class="min-h-screen flex flex-col relative w-full overflow-x-hidden">
-        </div>
+        <!-- DOM 渲染将由 JavaScript 完全接管 -->
+    </div>
 
     <script>
         // --- 1. 全局配置与状态 (State) ---
@@ -220,7 +224,7 @@
                 grade_1: "一年级", grade_2: "二年级", grade_3: "三年级", grade_4: "四年级", grade_5: "五年级", grade_6: "六年级",
                 rank_champ: "冠军", rank_runnerup: "亚军", rank_3rd: "季军", rank_4th: "第四名", rank_5th: "第五名",
                 rank_excellence: "优秀奖",
-                btn_student_records: "学生荣誉榜",
+                btn_student_records: "学生荣耀榜",
                 title_student_records: "个人成就档案",
                 ph_search_student_records: "输入姓名或班级搜索...",
                 label_total_awards: "项大奖",
@@ -237,14 +241,14 @@
                 nav_lobby: "Lobi",
                 lobby_title: "Semua Pertandingan",
                 filter_all: "Semua",
-                filter_ongoing: "Berjalan",
+                filter_ongoing: "Berlangsung",
                 filter_ended: "Tamat",
                 status_connecting: "Menyambung...",
                 status_live: "Segerak",
                 status_offline: "Luar Talian",
                 search_placeholder: "Cari nama, kelas atau acara...",
                 btn_exit_admin: "Keluar Admin",
-                label_ongoing: "Berjalan",
+                label_ongoing: "Berlangsung",
                 label_registered: "Daftar",
                 unit_person: "org",
                 msg_no_competitions: "Tiada acara",
@@ -325,7 +329,7 @@
                 grade_1: "Tahun 1", grade_2: "Tahun 2", grade_3: "Tahun 3", grade_4: "Tahun 4", grade_5: "Tahun 5", grade_6: "Tahun 6",
                 rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Ketiga", rank_4th: "Keempat", rank_5th: "Kelima",
                 rank_excellence: "Saguhati",
-                btn_student_records: "Profil Bintang",
+                btn_student_records: "Bintang Sekolah",
                 title_student_records: "Profil Pencapaian",
                 ph_search_student_records: "Cari nama atau kelas...",
                 label_total_awards: "Anugerah",
@@ -335,7 +339,7 @@
                 msg_copied: "Rekod pencapaian telah disalin!"
             },
             en: {
-                school_name_line1: "Intra-school Competition Management System",
+                school_name_line1: "Intra-school Competition Management",
                 school_name_line2: "SJK (C) Ladang Grisek",
                 school_header_print: "SJK (C) Ladang Grisek",
                 system_subtitle: "Cloud Real-time",
@@ -430,7 +434,7 @@
                 grade_1: "Year 1", grade_2: "Year 2", grade_3: "Year 3", grade_4: "Year 4", grade_5: "Year 5", grade_6: "Year 6",
                 rank_champ: "Champion", rank_runnerup: "1st Runner-up", rank_3rd: "2nd Runner-up", rank_4th: "Fourth Place", rank_5th: "Fifth Place",
                 rank_excellence: "Consolation",
-                btn_student_records: "Student Honors",
+                btn_student_records: "Hall of Fame",
                 title_student_records: "Achievement Portfolio",
                 ph_search_student_records: "Search student name or class...",
                 label_total_awards: "Awards",
@@ -454,6 +458,29 @@
             };
             return map[dbValue] ? t(map[dbValue]) : dbValue;
         };
+
+        // 🌟 核心智能：根据比赛名称自动翻译多语种名次
+        const smartRank = (dbRank, category) => {
+            if (!dbRank) return '';
+            const map = {
+                '冠军': 'rank_champ', '亚军': 'rank_runnerup', '季军': 'rank_3rd',
+                '第四名': 'rank_4th', '第五名': 'rank_5th', '优秀奖': 'rank_excellence'
+            };
+            const key = map[dbRank];
+            if (!key) return dbRank; 
+            
+            if (!category) return translations[state.lang][key];
+
+            const isChinese = /[\u4e00-\u9fa5]/.test(category);
+            const isEnglish = /[a-zA-Z]/.test(category) && /(story|spelling|reading|essay|competition|math|science|english|choir|singing|action|song|poetry|public speaking|choral)/i.test(category) && !isChinese;
+            
+            if (isChinese) return translations['zh'][key];
+            if (isEnglish) return translations['en'][key];
+            if (/[a-zA-Z]/.test(category) && !isChinese) return translations['ms'][key]; 
+            
+            return translations[state.lang][key]; 
+        };
+
         const formatName = (name, isDropdown = false) => {
             if (!name) return '';
             const teamMatch = name.match(/(\[.*?\])$/);
@@ -891,13 +918,13 @@
             updateDOM();
         };
 
+        // 🌟 纯净版复制功能
         const copyStudentRecords = (encodedStuName, encodedStuClass, encodedAwardsJson) => {
             const awards = JSON.parse(decodeURIComponent(encodedAwardsJson));
             
-            // 纯净版复制：只要比赛名称和名次
             let text = '';
             awards.forEach(a => {
-                text += `${a.category} (${t_rank(a.rank)})\n`;
+                text += `${a.category} (${smartRank(a.rank, a.category)})\n`;
             });
             
             const textArea = document.createElement("textarea");
@@ -911,6 +938,55 @@
                 showToast('复制失败，请重试', 'error');
             }
             document.body.removeChild(textArea);
+        };
+
+        // 🌟 新增：导出光荣榜到 Excel
+        const exportStudentRecordsToExcel = () => {
+            let awards = state.dbResults.filter(r => r.rank && r.rank.trim() !== '');
+            if (state.studentSearchQuery) {
+                const q = state.studentSearchQuery.toLowerCase();
+                awards = awards.filter(r => 
+                    (r.studentName || '').toLowerCase().includes(q) || 
+                    (r.studentClass || '').toLowerCase().includes(q)
+                );
+            }
+
+            const studentMap = {};
+            awards.forEach(a => {
+                const pureName = a.studentName.replace(/\s*\[.*?\]$/, '').trim();
+                const cleanName = formatName(pureName);
+                const key = `${a.studentClass}-${cleanName}`;
+                if (!studentMap[key]) {
+                    studentMap[key] = { name: cleanName, class: a.studentClass, awards: [], totalWeight: 0 };
+                }
+                studentMap[key].awards.push({ ...a, category: a.category });
+                studentMap[key].totalWeight += getRankWeight(a.rank);
+            });
+
+            const sortedStudents = Object.values(studentMap).sort((a, b) => {
+                if (state.studentRecordsSortBy === 'class') {
+                    const classCmp = a.class.toString().localeCompare(b.class.toString(), undefined, {numeric: true});
+                    if (classCmp !== 0) return classCmp;
+                }
+                return b.totalWeight - a.totalWeight;
+            });
+
+            const ws_data = [];
+            ws_data.push(["班级 (Class)", "姓名 (Name)", "获奖总数 (Total Awards)", "荣誉记录 (Achievement Records)"]);
+            
+            sortedStudents.forEach(stu => {
+                const records = stu.awards.sort((a, b) => getRankWeight(b.rank) - getRankWeight(a.rank))
+                    .map((a, i) => `${i + 1}. ${a.category} (${smartRank(a.rank, a.category)})`)
+                    .join('\n');
+                ws_data.push([stu.class, stu.name, stu.awards.length, records]);
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(ws_data);
+            ws['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 60 }]; // 自动调整列宽
+            
+            XLSX.utils.book_append_sheet(wb, ws, "学生个人成就");
+            XLSX.writeFile(wb, `学生光荣榜_${formatDate(new Date()).replace(/\//g, '')}.xlsx`);
         };
 
 
@@ -1737,6 +1813,7 @@
 
             const app = document.getElementById('app');
             app.innerHTML = `
+                <!-- Navbar -->
                 <nav class="bg-indigo-600 text-white shadow-lg sticky top-0 z-40 no-print font-kai">
                     <div class="container mx-auto px-4 py-3 flex justify-between items-center">
                         <div onclick="app.goHome()" class="flex items-center space-x-2 cursor-pointer group relative">
@@ -1770,10 +1847,12 @@
                     </div>
                 </nav>
 
+                <!-- 容器框架 -->
                 <main class="flex-grow container mx-auto px-4 py-6 max-w-5xl">
                     ${renderActiveTab()}
                 </main>
 
+                <!-- 挂载弹窗组件 -->
                 ${renderModals()}
             `;
 
@@ -1949,7 +2028,6 @@
             awards.forEach(a => {
                 const pureName = a.studentName.replace(/\s*\[.*?\]$/, '').trim();
                 const cleanName = formatName(pureName);
-                
                 const key = `${a.studentClass}-${cleanName}`;
                 if (!studentMap[key]) {
                     studentMap[key] = { name: cleanName, class: a.studentClass, awards: [], totalWeight: 0 };
@@ -1958,12 +2036,9 @@
                 studentMap[key].totalWeight += getRankWeight(a.rank);
             });
 
-            // 智能双重排序逻辑
             const sortedStudents = Object.values(studentMap).sort((a, b) => {
                 if (state.studentRecordsSortBy === 'class') {
-                    const classA = a.class.toString();
-                    const classB = b.class.toString();
-                    const classCmp = classA.localeCompare(classB, undefined, {numeric: true});
+                    const classCmp = a.class.toString().localeCompare(b.class.toString(), undefined, {numeric: true});
                     if (classCmp !== 0) return classCmp;
                 }
                 return b.totalWeight - a.totalWeight;
@@ -1979,7 +2054,6 @@
                     </div>
                 `;
             } else if (state.studentRecordsViewMode === 'list') {
-                // --- 列表视图 (List View) ---
                 contentHTML = `
                     <div class="flex flex-col gap-3 px-2 sm:px-0">
                         ${sortedStudents.map(stu => `
@@ -1996,7 +2070,7 @@
                                 <div class="flex-grow flex flex-wrap gap-2 px-0 md:px-6">
                                     ${stu.awards.sort((a, b) => getRankWeight(b.rank) - getRankWeight(a.rank)).map(a => `
                                         <span class="inline-flex items-center border px-2 py-1 rounded-md text-xs shadow-sm bg-slate-50 border-slate-200 text-slate-700 max-w-[220px]">
-                                            <span class="font-bold mr-1.5 ${getRankClass(a.rank).split(' ')[1]} whitespace-nowrap">${t_rank(a.rank)}</span> 
+                                            <span class="font-bold mr-1.5 ${getRankClass(a.rank).split(' ')[1]} whitespace-nowrap">${smartRank(a.rank, a.category)}</span> 
                                             <span class="truncate">${a.category}</span>
                                         </span>
                                     `).join('')}
@@ -2015,7 +2089,6 @@
                     </div>
                 `;
             } else {
-                // --- 网格视图 (Grid View) ---
                 contentHTML = `
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 px-2 sm:px-0">
                         ${sortedStudents.map(stu => `
@@ -2042,7 +2115,7 @@
                                                 <div class="mt-0.5 text-amber-500 mr-2.5"><i class="fas fa-award"></i></div>
                                                 <div class="flex-grow min-w-0">
                                                     <div class="text-xs text-slate-500 mb-1 truncate font-medium">${award.category}</div>
-                                                    <div><span class="inline-block ${getRankClass(award.rank)} border px-2 py-0.5 rounded-md text-[10px] font-black tracking-wide shadow-sm">${t_rank(award.rank)}</span></div>
+                                                    <div><span class="inline-block ${getRankClass(award.rank)} border px-2 py-0.5 rounded-md text-[10px] font-black tracking-wide shadow-sm">${smartRank(award.rank, award.category)}</span></div>
                                                 </div>
                                             </li>
                                         `).join('')}
@@ -2080,7 +2153,10 @@
                                     class="w-full border border-slate-300 rounded-xl pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition bg-white shadow-sm font-bold text-slate-700">
                             </div>
                             
-                            <div class="flex gap-2">
+                            <div class="flex flex-wrap gap-2 justify-end w-full md:w-auto">
+                                <button onclick="app.exportStudentRecordsToExcel()" class="bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white px-3 py-2.5 rounded-xl text-sm font-bold transition flex items-center shadow-sm flex-shrink-0" title="导出为 Excel">
+                                    <i class="fas fa-file-excel"></i> <span class="hidden sm:inline ml-1.5">导出 Excel</span>
+                                </button>
                                 <div class="relative shadow-sm rounded-xl bg-white border border-slate-300 flex items-center font-bold text-sm text-slate-700 flex-shrink-0">
                                     <select onchange="app.changeStudentSort(this.value)" class="outline-none bg-transparent appearance-none pl-3 pr-8 py-2.5 cursor-pointer w-full h-full">
                                         <option value="awards" ${state.studentRecordsSortBy === 'awards' ? 'selected' : ''}>${t('label_sort_awards')}</option>
@@ -2716,7 +2792,7 @@
                                         </div>
                                     </div>
                                     <div class="text-right flex-shrink-0">
-                                        <span class="inline-block ${getRankGradient(stu.rank)} border px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide shadow-sm whitespace-nowrap">${t_rank(stu.rank)}</span>
+                                        <span class="inline-block ${getRankGradient(stu.rank)} border px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide shadow-sm whitespace-nowrap">${smartRank(stu.rank, state.selectedCategory)}</span>
                                     </div>
                                 </div>
                             `).join('')}
@@ -2740,6 +2816,7 @@
                         <div class="overflow-auto p-4 sm:p-6 flex-grow bg-slate-100 flex justify-start sm:justify-center items-start">
                             <div id="poster-container" class="poster-container min-w-[900px] w-[900px] p-8 pb-12 relative shadow-2xl rounded-2xl flex flex-col shrink-0 origin-top-left sm:origin-top overflow-hidden">
                                 
+                                <!-- 学术漂浮装饰 -->
                                 <div class="absolute top-10 left-12 text-white/20 text-5xl transform -rotate-12">🎓</div>
                                 <div class="absolute bottom-20 left-16 text-white/20 text-4xl transform rotate-12">📚</div>
                                 <div class="absolute top-24 right-16 text-white/20 text-6xl transform rotate-45">🚀</div>
@@ -2844,6 +2921,7 @@
             toggleStudentViewMode,
             changeStudentSort,
             copyStudentRecords,
+            exportStudentRecordsToExcel,
             goHome,
             goToRegister,
             enterAdmin,
