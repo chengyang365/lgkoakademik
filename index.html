@@ -976,7 +976,7 @@
             
             sortedStudents.forEach(stu => {
                 const records = stu.awards.sort((a, b) => getRankWeight(b.rank) - getRankWeight(a.rank))
-                    .map(a => `${a.category} (${smartRank(a.rank, a.category)})`) // ⬅️ 移除了 ${i + 1}.
+                    .map(a => `${a.category} - ${smartRank(a.rank, a.category)}`) // ⬅️ 移除了 ${i + 1}.
                     .join('\n');
                 ws_data.push([stu.class, stu.name, stu.awards.length, records]);
             });
