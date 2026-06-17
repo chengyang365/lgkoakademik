@@ -327,7 +327,7 @@
                 label_start_date: "Tarikh Mula",
                 label_end_date: "Tarikh Tamat",
                 grade_1: "Tahun 1", grade_2: "Tahun 2", grade_3: "Tahun 3", grade_4: "Tahun 4", grade_5: "Tahun 5", grade_6: "Tahun 6",
-                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Ketiga", rank_4th: "Keempat", rank_5th: "Kelima",
+                rank_champ: "Johan", rank_runnerup: "Naib Johan", rank_3rd: "Tempat Ketiga", rank_4th: "Tempat Keempat", rank_5th: "Tempat Kelima",
                 rank_excellence: "Saguhati",
                 btn_student_records: "Bintang Sekolah",
                 title_student_records: "Profil Pencapaian",
@@ -924,7 +924,7 @@
             
             let text = '';
             awards.forEach(a => {
-                text += `${a.category} (${smartRank(a.rank, a.category)})\n`;
+                text += `${a.category} - ${smartRank(a.rank, a.category)}\n`;
             });
             
             const textArea = document.createElement("textarea");
