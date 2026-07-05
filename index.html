@@ -155,6 +155,7 @@
                 msg_no_records: "暂无参赛记录",
                 btn_go_register: "前往报名",
                 btn_batch_entry: "批量打分",
+                btn_shuffle: "打乱出场序",
                 btn_poster: "生成海报",
                 btn_print_options: "报表打印",
                 btn_export_excel: "导出 Excel 表格",
@@ -261,6 +262,7 @@
                 msg_no_records: "Tiada rekod",
                 btn_go_register: "Daftar",
                 btn_batch_entry: "Input Markah",
+                btn_shuffle: "Rombak Senarai",
                 btn_poster: "Poster",
                 btn_print_options: "Cetak",
                 btn_export_excel: "Eksport Excel",
@@ -367,6 +369,7 @@
                 msg_no_records: "No records found",
                 btn_go_register: "Register Now",
                 btn_batch_entry: "Batch Score",
+                btn_shuffle: "Shuffle List",
                 btn_poster: "Poster",
                 btn_print_options: "Print",
                 btn_export_excel: "Export Excel",
@@ -606,7 +609,9 @@
                 const students = filtered.filter(d => d.category && d.category.trim() === catName.trim());
                 if (state.searchQuery && students.length === 0) return null;
                 
+                // Keep current order if no rank/score, otherwise sort by rank
                 students.sort((a, b) => (getRankWeight(b.rank) - getRankWeight(a.rank)) || ((parseFloat(b.score)||0) - (parseFloat(a.score)||0)));
+                
                 const classMap = {};
                 students.forEach(s => {
                     const c = s.studentClass || '未分类';
@@ -822,6 +827,7 @@
                             }
                         });
                     }
+                    // Retain shuffle order locally if not refreshing completely
                     state.dbResults = serverResults;
                 }
             } catch (e) {
@@ -872,6 +878,25 @@
         };
 
         // --- 6. 事件控制器总线 (Application Handlers Bus) ---
+        // 🌟 洗牌算法：随机打乱当前比赛的出场名单
+        const shuffleCurrentCategory = () => {
+            const catName = state.selectedCategory;
+            if (!catName) return;
+            
+            const currentRecords = state.dbResults.filter(r => r.category === catName);
+            const otherRecords = state.dbResults.filter(r => r.category !== catName);
+            
+            // Fisher-Yates 洗牌算法
+            for (let i = currentRecords.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [currentRecords[i], currentRecords[j]] = [currentRecords[j], currentRecords[i]];
+            }
+            
+            state.dbResults = [...otherRecords, ...currentRecords];
+            updateDOM();
+            showToast('名单已成功随机打乱！现在打印即为抽签顺序。', 'success');
+        };
+
         // 🌟 修复：应用系统内置的 showDialog 弹窗替换掉在沙盒环境中失效的原生 confirm()
         const goHome = async () => {
             if (state.isBatchEditing) {
@@ -1040,7 +1065,7 @@
             
             sortedStudents.forEach(stu => {
                 const records = stu.awards.sort((a, b) => getRankWeight(b.rank) - getRankWeight(a.rank))
-                    .map(a => `• ${a.category} (${smartRank(a.rank, a.category)})`)
+                    .map(a => `${a.category} - ${smartRank(a.rank, a.category)}`) // 无圆点纯净格式
                     .join('\r\n');
                 ws_data.push([stu.class, stu.name, stu.awards.length, records]);
             });
@@ -2292,6 +2317,9 @@
                             <div class="flex flex-wrap justify-end gap-2 sm:gap-3">
                                 <button onclick="app.startBatchEdit()" class="bg-white border border-indigo-300 text-indigo-600 hover:bg-indigo-50 px-3 sm:px-4 py-2 rounded-xl font-bold shadow-sm text-xs sm:text-sm flex items-center transition">
                                     <i class="fas fa-pencil-alt mr-1 sm:mr-2"></i> ${t('btn_batch_entry')}
+                                </button>
+                                <button onclick="app.shuffleCurrentCategory()" class="bg-white border border-purple-300 text-purple-600 hover:bg-purple-50 px-3 sm:px-4 py-2 rounded-xl font-bold shadow-sm text-xs sm:text-sm flex items-center transition">
+                                    <i class="fas fa-random mr-1 sm:mr-2"></i> ${t('btn_shuffle')}
                                 </button>
                                 <button onclick="app.openPosterModal()" class="bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white px-3 sm:px-4 py-2 rounded-xl font-bold shadow-sm text-xs sm:text-sm flex items-center transition">
                                     <i class="fas fa-image mr-1 sm:mr-2"></i> ${t('btn_poster')}
