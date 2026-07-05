@@ -1040,7 +1040,7 @@
             
             sortedStudents.forEach(stu => {
                 const records = stu.awards.sort((a, b) => getRankWeight(b.rank) - getRankWeight(a.rank))
-                    .map(a => `• ${a.category} - ${smartRank(a.rank, a.category)}`)
+                    .map(a => `${a.category} - ${smartRank(a.rank, a.category)}`) // ⬅️ 修改为没有黑点，使用减号连接
                     .join('\r\n');
                 ws_data.push([stu.class, stu.name, stu.awards.length, records]);
             });
