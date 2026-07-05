@@ -369,7 +369,7 @@
                 btn_batch_entry: "Batch Score",
                 btn_poster: "Poster",
                 btn_print_options: "Print",
-                btn_export_csv: "Export Excel",
+                btn_export_excel: "Export Excel",
                 print_roster: "Name List",
                 print_score_sheet: "Scoring Sheet",
                 print_winners: "Winners List",
@@ -872,10 +872,36 @@
         };
 
         // --- 6. 事件控制器总线 (Application Handlers Bus) ---
-        const goHome = () => {
+        // 🌟 修复：应用系统内置的 showDialog 弹窗替换掉在沙盒环境中失效的原生 confirm()
+        const goHome = async () => {
+            if (state.isBatchEditing) {
+                const confirmed = await showDialog({ type: 'confirm', title: '确认返回', message: '您正在批量录分中，未保存的改动将丢失，确定返回首页吗？', icon: 'fas fa-exclamation-triangle text-amber-500' });
+                if (!confirmed) return;
+            }
             state.currentTab = 'results';
             state.selectedCategory = null;
             state.isBatchEditing = false;
+            updateDOM();
+        };
+
+        const exitCategory = async () => {
+            if (state.isBatchEditing) {
+                const confirmed = await showDialog({ type: 'confirm', title: '退出批量录分', message: '未保存的临时改动将丢失，确定要退出吗？', icon: 'fas fa-exclamation-triangle text-amber-500' });
+                if (!confirmed) return;
+            }
+            state.isBatchEditing = false;
+            state.selectedCategory = null;
+            updateDOM();
+        };
+
+        const cancelBatchEdit = async () => {
+            if (state.isBatchEditing) {
+                const confirmed = await showDialog({ type: 'confirm', title: '取消录分', message: '未保存的临时改动将丢失，确定要取消吗？', icon: 'fas fa-exclamation-triangle text-amber-500' });
+                if (!confirmed) return;
+            }
+            state.isBatchEditing = false;
+            state.batchEditData = [];
+            state.historySnapshot = null;
             updateDOM();
         };
 
@@ -912,13 +938,6 @@
                     updateDOM();
                 }
             }
-        };
-
-        const exitCategory = () => {
-            if (state.isBatchEditing && !confirm("退出批量录分？未保存的临时改动将丢失。")) return;
-            state.isBatchEditing = false;
-            state.selectedCategory = null;
-            updateDOM();
         };
 
         const toggleLang = () => {
@@ -1021,8 +1040,8 @@
             
             sortedStudents.forEach(stu => {
                 const records = stu.awards.sort((a, b) => getRankWeight(b.rank) - getRankWeight(a.rank))
-                    .map((a, i) => `${a.category} (${smartRank(a.rank, a.category)})`)
-                    .join('\n');
+                    .map(a => `• ${a.category} - ${smartRank(a.rank, a.category)}`)
+                    .join('\r\n');
                 ws_data.push([stu.class, stu.name, stu.awards.length, records]);
             });
 
@@ -1041,13 +1060,6 @@
             state.historySnapshot = null;
             state.isBatchEditing = true;
             state.showScoreInput = false; 
-            updateDOM();
-        };
-
-        const cancelBatchEdit = () => {
-            state.isBatchEditing = false;
-            state.batchEditData = [];
-            state.historySnapshot = null;
             updateDOM();
         };
 
@@ -2767,7 +2779,7 @@
                     <div class="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all mt-auto sm:mt-0 mb-0 sm:mb-auto flex flex-col max-h-[90vh]">
                         <div class="bg-indigo-600 px-6 py-5 flex justify-between items-center text-white shrink-0">
                             <h3 class="font-bold text-lg font-kai tracking-wide"><i class="fas fa-medal mr-2"></i>${t('modal_score_title')}</h3>
-                            <button onclick="state.modals.score.visible = false; app.refreshData(true);" class="p-1 -mr-2 text-indigo-200 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
+                            <button onclick="app.closeScoreModal()" class="p-1 -mr-2 text-indigo-200 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
                         <div class="p-6 space-y-5 overflow-y-auto shrink-0">
                             <div class="bg-indigo-50 p-4 rounded-xl text-base text-indigo-900 border border-indigo-100 shadow-sm">
@@ -2792,7 +2804,7 @@
                             </div>
                         </div>
                         <div class="px-6 py-4 pb-safe bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
-                            <button onclick="state.modals.score.visible = false; app.refreshData(true);" class="px-5 py-3 sm:py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition flex-1 sm:flex-none">${t('btn_cancel')}</button>
+                            <button onclick="app.closeScoreModal()" class="px-5 py-3 sm:py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition flex-1 sm:flex-none">${t('btn_cancel')}</button>
                             <button onclick="app.submitScore()" ${state.isSubmitting ? 'disabled' : ''} class="px-6 py-3 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition disabled:opacity-50 flex items-center justify-center flex-1 sm:flex-none">
                                 ${state.isSubmitting ? '<i class="fas fa-spinner fa-spin mr-2"></i>' : ''} ${t('btn_confirm')}
                             </button>
@@ -2811,7 +2823,7 @@
                     <div class="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all mt-auto sm:mt-0 mb-0 sm:mb-auto flex flex-col max-h-[90vh]">
                         <div class="bg-indigo-600 px-6 py-5 flex justify-between items-center text-white sticky top-0 z-10 shrink-0">
                             <h3 class="font-bold text-lg font-kai tracking-wide"><i class="fas fa-edit mr-2"></i>${t('modal_edit_title')}</h3>
-                            <button onclick="state.modals.editCategory.visible = false; app.refreshData(true);" class="p-1 -mr-2 text-indigo-200 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
+                            <button onclick="app.closeEditCategoryModal()" class="p-1 -mr-2 text-indigo-200 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
                         <div class="p-6 space-y-5 overflow-y-auto shrink-0">
                             <div>
@@ -2829,7 +2841,7 @@
                             <div class="bg-indigo-50 p-4 rounded-xl text-xs sm:text-sm text-indigo-800 border border-indigo-100 leading-relaxed font-medium shadow-sm"><i class="fas fa-info-circle mr-1.5 text-indigo-600"></i> ${t('hint_edit_sync')}</div>
                         </div>
                         <div class="px-6 py-4 pb-safe bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
-                            <button onclick="state.modals.editCategory.visible = false; app.refreshData(true);" class="px-5 py-3 sm:py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition flex-1 sm:flex-none">${t('btn_cancel')}</button>
+                            <button onclick="app.closeEditCategoryModal()" class="px-5 py-3 sm:py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition flex-1 sm:flex-none">${t('btn_cancel')}</button>
                             <button onclick="app.submitEditCategory()" ${state.isSubmitting ? 'disabled' : ''} class="px-6 py-3 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition disabled:opacity-50 flex items-center justify-center flex-1 sm:flex-none">
                                 ${state.isSubmitting ? '<i class="fas fa-spinner fa-spin mr-2"></i>' : ''} ${t('btn_save')}
                             </button>
@@ -3045,8 +3057,10 @@
             submitForm,
             deleteRegistration,
             openScoreModal,
+            closeScoreModal: () => { state.modals.score.visible = false; updateDOM(); }, 
             submitScore,
             openEditCategory,
+            closeEditCategoryModal: () => { state.modals.editCategory.visible = false; updateDOM(); },
             submitEditCategory,
             toggleStatus,
             adminAddItem,
