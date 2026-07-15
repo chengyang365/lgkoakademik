@@ -107,7 +107,6 @@
             unsyncedQueue: JSON.parse(localStorage.getItem('unsyncedQueue') || '[]'),
             searchQuery: '',
             
-            // 学生光荣榜专属状态
             studentSearchQuery: '', 
             studentRecordsViewMode: localStorage.getItem('app_student_view') || 'grid',
             studentRecordsSortBy: localStorage.getItem('app_student_sort') || 'awards',
@@ -609,9 +608,7 @@
                 const students = filtered.filter(d => d.category && d.category.trim() === catName.trim());
                 if (state.searchQuery && students.length === 0) return null;
                 
-                // Keep current order if no rank/score, otherwise sort by rank
                 students.sort((a, b) => (getRankWeight(b.rank) - getRankWeight(a.rank)) || ((parseFloat(b.score)||0) - (parseFloat(a.score)||0)));
-                
                 const classMap = {};
                 students.forEach(s => {
                     const c = s.studentClass || '未分类';
@@ -767,7 +764,6 @@
                 
                 const resultJSON = await response.json();
                 
-                // 🛠️ 精准提取数据：如果后台穿回来的是包裹 { status: "success", data: [...] }，自动解包！
                 if (resultJSON && resultJSON.status === 'success' && resultJSON.data !== undefined) {
                     return resultJSON.data;
                 }
@@ -784,11 +780,8 @@
         };
 
         const fetchAllData = async (isBackground = false) => {
-            if (isBackground) {
-                if (state.unsyncedQueue.length > 0 && !state.isOfflineMode) app.syncQueueData(true);
-                const isInteracting = state.isBatchEditing || state.currentTab !== 'results' || state.modals.score.visible || state.modals.editCategory.visible || state.modals.poster.visible || state.modals.dialog.visible;
-                if (isInteracting) return; 
-            }
+            const isInteracting = state.isBatchEditing || state.currentTab !== 'results' || state.modals.score.visible || state.modals.editCategory.visible || state.modals.poster.visible || state.modals.dialog.visible;
+            if (isBackground && isInteracting) return; 
             
             if (!isBackground) { state.isRefreshing = true; updateDOM(); }
             try {
@@ -814,21 +807,57 @@
                 if(!state.isOfflineMode) {
                     let serverResults = normalizeData(rawResults).map((item, i) => ({ ...item, rowIndex: i }));
 
+                    // 🌟 终极防重静默对账系统 (Silent Reconciliation)
                     if (state.unsyncedQueue.length > 0) {
+                        let remainingQueue = [];
+                        let reconciledCount = 0;
+
                         state.unsyncedQueue.forEach(pending => {
-                            if (pending.action === 'SCORE' || pending.action === 'updateScore') {
-                                const target = serverResults.find(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
-                                if (target) { target.score = pending.score; target.rank = pending.rank; }
-                            } else if (pending.action === 'REG' || pending.action === 'register') {
-                                const exists = serverResults.some(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
-                                if (!exists) { serverResults.push({ studentName: pending.name, studentClass: pending.stuClass, category: pending.category, score: '', rank: '', note: pending.note || '', rowIndex: `pending-${pending.id}` }); }
+                            let isAlreadyResolved = false;
+                            const target = serverResults.find(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
+
+                            if (pending.action === 'REG') {
+                                if (target) isAlreadyResolved = true; 
+                            } else if (pending.action === 'SCORE' || pending.action === 'updateScore') {
+                                if (target && String(target.score) == String(pending.score) && String(target.rank) == String(pending.rank)) {
+                                    isAlreadyResolved = true;
+                                }
                             } else if (pending.action === 'DEL') {
-                                serverResults = serverResults.filter(s => !(s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === state.selectedCategory));
+                                if (!target) isAlreadyResolved = true;
+                            }
+
+                            if (isAlreadyResolved) {
+                                reconciledCount++;
+                                const logItem = state.auditLog.find(l => l.id === pending.id);
+                                if (logItem) logItem.syncStatus = 'synced';
+                            } else {
+                                remainingQueue.push(pending);
+                                // 本地补偿视觉
+                                if (pending.action === 'SCORE' || pending.action === 'updateScore') {
+                                    if (target) { target.score = pending.score; target.rank = pending.rank; }
+                                } else if (pending.action === 'REG') {
+                                    if (!target) { serverResults.push({ studentName: pending.name, studentClass: pending.stuClass, category: pending.category, score: '', rank: '', note: pending.note || '', rowIndex: `pending-${pending.id}` }); }
+                                } else if (pending.action === 'DEL') {
+                                    serverResults = serverResults.filter(s => !(s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === state.selectedCategory));
+                                }
                             }
                         });
+
+                        state.unsyncedQueue = remainingQueue;
+                        localStorage.setItem('unsyncedQueue', JSON.stringify(state.unsyncedQueue));
+                        localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
+                        
+                        if (reconciledCount > 0 && !isBackground) {
+                            showToast(`网络恢复，已自动对账并同步 ${reconciledCount} 条数据！`, 'success');
+                        }
                     }
-                    // Retain shuffle order locally if not refreshing completely
+                    
                     state.dbResults = serverResults;
+                    
+                    // 🌟 自动补发未对账成功的请求
+                    if (state.unsyncedQueue.length > 0) {
+                        app.syncQueueData(true);
+                    }
                 }
             } catch (e) {
                 if (!isBackground) state.competitionItems = initItemsFromStorage();
@@ -874,10 +903,26 @@
             
             if (!silent && successCount > 0) showToast(`🎉 成功安全上云补传了 ${successCount} 条数据！`);
             if (!silent && remaining.length > 0) showToast(`仍有 ${remaining.length} 条数据未能同步。`, 'error');
-            fetchAllData(silent);
+            
+            if (!silent) fetchAllData(true);
         };
 
         // --- 6. 事件控制器总线 (Application Handlers Bus) ---
+        // 🌟 统一错误拦截器 (处理未授权或密码失效问题)
+        const handleAdminError = (e, defaultMsg) => {
+            console.error(e);
+            if (e.message && (e.message.includes('Unauthorized') || e.message.includes('password') || e.message.includes('Invalid'))) {
+                state.isAdmin = false;
+                state.adminPwd = '';
+                state.currentTab = 'results';
+                state.isSubmitting = false;
+                updateDOM();
+                showDialog({ title: '权限失效', message: '管理员密码错误或凭证过期，请重新登录后台！', icon: 'fas fa-user-lock text-rose-500' });
+            } else {
+                showDialog({ title: '操作失败', message: defaultMsg, icon: 'fas fa-times-circle text-rose-500' });
+            }
+        };
+
         // 🌟 洗牌算法：随机打乱当前比赛的出场名单
         const shuffleCurrentCategory = () => {
             const catName = state.selectedCategory;
@@ -886,7 +931,6 @@
             const currentRecords = state.dbResults.filter(r => r.category === catName);
             const otherRecords = state.dbResults.filter(r => r.category !== catName);
             
-            // Fisher-Yates 洗牌算法
             for (let i = currentRecords.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [currentRecords[i], currentRecords[j]] = [currentRecords[j], currentRecords[i]];
@@ -897,7 +941,6 @@
             showToast('名单已成功随机打乱！现在打印即为抽签顺序。', 'success');
         };
 
-        // 🌟 修复：应用系统内置的 showDialog 弹窗替换掉在沙盒环境中失效的原生 confirm()
         const goHome = async () => {
             if (state.isBatchEditing) {
                 const confirmed = await showDialog({ type: 'confirm', title: '确认返回', message: '您正在批量录分中，未保存的改动将丢失，确定返回首页吗？', icon: 'fas fa-exclamation-triangle text-amber-500' });
@@ -957,7 +1000,7 @@
                     await showDialog({ title: '登录成功', message: '管理模式已开启', showButtons: false, autoClose: 1000, icon: 'fas fa-check-circle text-emerald-500' });
                     state.currentTab = 'admin';
                 } catch(e) {
-                    showDialog({ title: '错误', message: '授权验证失败，密码错误或网络超时！', icon: 'fas fa-times-circle text-rose-500' });
+                    showDialog({ title: '验证失败', message: '密码错误或网络超时，请重试！', icon: 'fas fa-times-circle text-rose-500' });
                 } finally {
                     state.isSubmitting = false;
                     updateDOM();
@@ -994,7 +1037,6 @@
             updateDOM();
         };
         
-        // --- 学生光荣榜专属控制器 ---
         const toggleStudentViewMode = (mode) => {
             state.studentRecordsViewMode = mode;
             localStorage.setItem('app_student_view', mode);
@@ -1007,37 +1049,24 @@
             updateDOM();
         };
 
-        // 🌟 纯净版复制功能 (包含智能名次翻译)
         const copyStudentRecords = (encodedStuName, encodedStuClass, encodedAwardsJson) => {
             const awards = JSON.parse(decodeURIComponent(encodedAwardsJson));
-            
             let text = '';
-            awards.forEach(a => {
-                text += `${a.category} (${smartRank(a.rank, a.category)})\n`;
-            });
+            awards.forEach(a => { text += `${a.category} (${smartRank(a.rank, a.category)})\n`; });
             
             const textArea = document.createElement("textarea");
             textArea.value = text.trim(); 
             document.body.appendChild(textArea);
             textArea.select();
-            try {
-                document.execCommand('copy');
-                showToast(t('msg_copied'), 'success');
-            } catch (err) {
-                showToast('复制失败，请重试', 'error');
-            }
+            try { document.execCommand('copy'); showToast(t('msg_copied'), 'success'); } catch (err) { showToast('复制失败', 'error'); }
             document.body.removeChild(textArea);
         };
 
-        // 🌟 导出光荣榜到 Excel
         const exportStudentRecordsToExcel = () => {
             let awards = state.dbResults.filter(r => r.rank && r.rank.trim() !== '');
             if (state.studentSearchQuery) {
                 const q = state.studentSearchQuery.toLowerCase();
-                awards = awards.filter(r => 
-                    (r.studentName || '').toLowerCase().includes(q) || 
-                    (r.studentClass || '').toLowerCase().includes(q)
-                );
+                awards = awards.filter(r => (r.studentName || '').toLowerCase().includes(q) || (r.studentClass || '').toLowerCase().includes(q));
             }
 
             const studentMap = {};
@@ -1045,9 +1074,7 @@
                 const pureName = a.studentName.replace(/\s*\[.*?\]$/, '').trim();
                 const cleanName = formatName(pureName);
                 const key = `${a.studentClass}-${cleanName}`;
-                if (!studentMap[key]) {
-                    studentMap[key] = { name: cleanName, class: a.studentClass, awards: [], totalWeight: 0 };
-                }
+                if (!studentMap[key]) studentMap[key] = { name: cleanName, class: a.studentClass, awards: [], totalWeight: 0 };
                 studentMap[key].awards.push({ ...a, category: a.category });
                 studentMap[key].totalWeight += getRankWeight(a.rank);
             });
@@ -1065,7 +1092,7 @@
             
             sortedStudents.forEach(stu => {
                 const records = stu.awards.sort((a, b) => getRankWeight(b.rank) - getRankWeight(a.rank))
-                    .map(a => `${a.category} - ${smartRank(a.rank, a.category)}`) // 无圆点纯净格式
+                    .map(a => `${a.category} - ${smartRank(a.rank, a.category)}`)
                     .join('\r\n');
                 ws_data.push([stu.class, stu.name, stu.awards.length, records]);
             });
@@ -1073,13 +1100,10 @@
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(ws_data);
             ws['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 60 }]; 
-            
             XLSX.utils.book_append_sheet(wb, ws, "学生个人成就");
             XLSX.writeFile(wb, `学生光荣榜_${formatDate(new Date()).replace(/\//g, '')}.xlsx`);
         };
 
-
-        // --- 批量评分与时光回溯 (Batch Edit with Snapshot Undo) ---
         const startBatchEdit = async () => {
             state.batchEditData = JSON.parse(JSON.stringify(getSelectedGroupedByGrade()));
             state.historySnapshot = null;
@@ -1117,7 +1141,6 @@
                 });
 
                 const sortedEntities = Array.from(entities.values()).sort((a, b) => b.score - a.score);
-                // 🌟 修复：拓展自动排名的计算容量，支持到前10名
                 const topRanks = ['冠军', '亚军', '季军', '第四名', '第五名', '第六名', '第七名', '第八名', '第九名', '第十名'];
 
                 let actualPosition = 1; 
@@ -1364,7 +1387,7 @@
                 name: entry.studentName,
                 stuClass: entry.studentClass,
                 category: entry.category,
-                note: entry.note, // 🌟 发送题目备注数据到本地防丢队列
+                note: entry.note, 
                 timestamp: new Date().toLocaleTimeString('zh-CN'),
                 action: 'REG',
                 syncStatus: 'pending',
@@ -1405,7 +1428,6 @@
             })();
         };
 
-        // 🌟 修复：应用安全的 escapeStr 以防单引号断层
         const deleteRegistration = async (stuName, className) => {
             if (!await showDialog({ type: 'confirm', title: '确认删除', message: `确定要删除选手 ${formatName(stuName)} 吗？`, icon: 'fas fa-user-minus text-rose-500' })) return;
             state.isSubmitting = true;
@@ -1442,6 +1464,11 @@
                 note: note || '',
                 category: state.selectedCategory
             };
+            updateDOM();
+        };
+
+        const closeScoreModal = () => {
+            state.modals.score.visible = false;
             updateDOM();
         };
 
@@ -1509,6 +1536,11 @@
             updateDOM();
         };
 
+        const closeEditCategoryModal = () => {
+            state.modals.editCategory.visible = false;
+            updateDOM();
+        };
+
         const submitEditCategory = async () => {
             const { oldName, newName, organizer, startDate, endDate } = state.modals.editCategory;
             if (!newName.trim()) return showDialog({ title: '提示', message: '项目名称不能为空' });
@@ -1521,8 +1553,7 @@
                 await fetchAllData(); 
                 showToast(t('toast_success'));
             } catch(e) { 
-                console.error(e); 
-                showDialog({ title: '错误', message: '编辑失败，可能由于密码效验过期，请尝试重新验证。', icon: 'fas fa-exclamation-triangle text-rose-500' });
+                handleAdminError(e, '编辑失败，可能是服务器阻断或网络超时，请重试。');
             } finally { state.isSubmitting = false; updateDOM(); }
         };
 
@@ -1534,8 +1565,7 @@
                 showToast(t('toast_success'));
                 await fetchAllData();
             } catch(e) { 
-                console.error(e); 
-                showDialog({ title: '拒绝', message: '无权操作此项目状态', icon: 'fas fa-times-circle text-rose-500' });
+                handleAdminError(e, '无权操作此项目状态或网络超时。');
             } finally { state.isSubmitting = false; updateDOM(); }
         };
 
@@ -1555,8 +1585,7 @@
                 state.adminForm = { name: '', organizer: '', startDate: '', endDate: '' };
                 await fetchAllData();
             } catch(e) { 
-                console.error(e); 
-                showDialog({ title: '创建失败', message: '可能是服务器阻断或密码凭证过期，请重试。', icon: 'fas fa-times-circle text-rose-500' });
+                handleAdminError(e, '可能是服务器阻断或网络超时，请重试。');
             } finally { state.isSubmitting = false; updateDOM(); }
         };
 
@@ -1569,8 +1598,7 @@
                 showToast(t('toast_success'));
                 await fetchAllData();
             } catch(e) { 
-                console.error(e); 
-                showDialog({ title: '删除拒绝', message: '无权限进行此破坏性操作', icon: 'fas fa-ban text-rose-500' });
+                handleAdminError(e, '无权限进行此破坏性操作或网络超时。');
             } finally { state.isSubmitting = false; updateDOM(); }
         };
 
