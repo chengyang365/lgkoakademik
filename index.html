@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>新廊华小校内竞赛管理系统</title>
     
+    <!-- PWA 配置支持 -->
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -12,25 +13,52 @@
     <link type="image/png" rel="icon" sizes="32x32" href="https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png">
     <link rel="apple-touch-icon" href="https://em-content.zobj.net/source/apple/419/trophy_1f3c6.png">
 
+    <!-- CSS 依赖 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.1.0/style.css" />
     
+    <!-- JS 依赖 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <style>
         body { font-family: ui-sans-serif, system-ui, sans-serif; background-color: #f8fafc; }
         .font-kai { font-family: "LXGW WenKai Screen", "LXGW WenKai", KaiTi, serif !important; }
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        
+        /* 强制去除 Number Input 的上下箭头 */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
-        .loader { border: 3px solid rgba(79, 70, 229, 0.2); border-top: 3px solid #4f46e5; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+
+        .loader {
+            border: 3px solid rgba(79, 70, 229, 0.2);
+            border-top: 3px solid #4f46e5;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* 移动端表格粘性头部与防穿模加固 */
         .sticky-table-header { position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .sticky-col-left { position: sticky; left: 0; z-index: 10; background-color: inherit; }
         .sticky-col-left-header { z-index: 30; }
-        .poster-container { background: linear-gradient(135deg, #312e81 0%, #6366f1 50%, #ec4899 100%); color: #fff; font-family: "LXGW WenKai", serif; }
-        .poster-card { background: linear-gradient(to right, rgba(255,255,255,0.98), rgba(255,255,255,0.9)); color: #333; box-shadow: 0 4px 15px rgba(0,0,0,0.08), inset 0 2px 0 rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.5); }
+
+        /* 海报专属样式 */
+        .poster-container {
+            background: linear-gradient(135deg, #312e81 0%, #6366f1 50%, #ec4899 100%);
+            color: #fff;
+            font-family: "LXGW WenKai", serif;
+        }
+        .poster-card { 
+            background: linear-gradient(to right, rgba(255,255,255,0.98), rgba(255,255,255,0.9)); 
+            color: #333; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08), inset 0 2px 0 rgba(255,255,255,0.8);
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+        
         @media print { .no-print { display: none !important; } body { background: white; } }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
@@ -38,8 +66,13 @@
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800">
-    <div id="app" class="min-h-screen flex flex-col relative w-full overflow-x-hidden"></div>
+
+    <div id="app" class="min-h-screen flex flex-col relative w-full overflow-x-hidden">
+        <!-- DOM 渲染将由 JavaScript 完全接管 -->
+    </div>
+
     <script>
+        // --- 1. 全局配置与状态 (State) ---
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzR8nuH_7_26D0EeuDeSnnSJ0dfSAsS052h9OBH_J_F8jOrGhnYVvK8PsRT1lREKdFK/exec"; 
         
         const urlParams = new URLSearchParams(window.location.search);
@@ -73,11 +106,15 @@
             auditLog: JSON.parse(localStorage.getItem('localAuditLog') || '[]'),
             unsyncedQueue: JSON.parse(localStorage.getItem('unsyncedQueue') || '[]'),
             searchQuery: '',
+            
+            // 学生光荣榜专属状态
             studentSearchQuery: '', 
             studentRecordsViewMode: localStorage.getItem('app_student_view') || 'grid',
             studentRecordsSortBy: localStorage.getItem('app_student_sort') || 'awards',
+            
             form: { category: '', isTeamBundle: false, groups: [] },
             keepClassInfo: false,
+            
             adminForm: { name: '', organizer: '', startDate: '', endDate: '' },
             modals: {
                 score: { visible: false, studentName: '', className: '', score: '', rank: '', note: '', category: '' },
@@ -90,6 +127,7 @@
             isGroupByGrade: true 
         };
 
+        // --- 2. 国际化翻译字典 (Translations) ---
         const translations = {
             zh: {
                 school_name_line1: "新廊华小校内竞赛管理系统",
@@ -334,7 +372,7 @@
                 btn_shuffle: "Shuffle List",
                 btn_poster: "Poster",
                 btn_print_options: "Print",
-                btn_export_excel: "Export Excel",
+                btn_export_csv: "Export Excel",
                 print_roster: "Name List",
                 print_score_sheet: "Scoring Sheet",
                 print_winners: "Winners List",
@@ -416,6 +454,7 @@
 
         const rankOptions = ['冠军', '亚军', '季军', '第四名', '第五名', '第六名', '第七名', '第八名', '第九名', '第十名', '优秀奖'];
 
+        // --- 3. 辅助计算工具 (Helpers) ---
         const t = (key) => translations[state.lang][key] || key;
         const t_rank = (dbValue) => {
             if (!dbValue) return '';
@@ -428,6 +467,7 @@
             return map[dbValue] ? t(map[dbValue]) : dbValue;
         };
 
+        // 🌟 防注入安全转义引擎：防止带单引号的名字破坏 DOM
         const escapeStr = (str) => {
             if (str === null || str === undefined) return '';
             return encodeURIComponent(str).replace(/'/g, "%27");
@@ -531,6 +571,7 @@
         
         const getStudentsByClass = (className) => state.studentDB[className] || [];
 
+        // --- 4. 数据一致性衍生状态机 (Computed Properties) ---
         const getAvailableYears = () => {
             const years = new Set([currentYear]);
             state.competitionItems.forEach(item => {
@@ -568,7 +609,6 @@
                 const students = filtered.filter(d => d.category && d.category.trim() === catName.trim());
                 if (state.searchQuery && students.length === 0) return null;
                 
-                // Sort array to keep score order
                 students.sort((a, b) => (getRankWeight(b.rank) - getRankWeight(a.rank)) || ((parseFloat(b.score)||0) - (parseFloat(a.score)||0)));
                 const classMap = {};
                 students.forEach(s => {
@@ -615,6 +655,7 @@
             return getGroupedResults().find(g => g.categoryName === state.selectedCategory)?.organizer || '';
         };
 
+        // 🌟 核心升级：拦截器模式处理“混龄公开赛/年级分组”
         const getSelectedGroupedByGrade = () => {
             const group = getGroupedResults().find(g => g.categoryName === state.selectedCategory);
             if (!group) return [];
@@ -648,6 +689,7 @@
             });
         };
 
+        // --- 5. 统一数据交互引擎 (Data Sync Network Engine) ---
         const fetchWithRealCheck = async (url, payload, action, timeout = 30000, overridePwd = null) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
@@ -698,6 +740,7 @@
             else resolve({ status: 'success', message: '离线模式运行中' });
         }, 300));
 
+        // 🌟 核心引擎修复：解决最新 GAS 返回带有 data Wrapper 导致界面为空的致命 Bug
         const fetchAPI = async (action, payload = null) => {
             if (GOOGLE_SCRIPT_URL.includes("在此处粘贴")) {
                 state.isOfflineMode = true;
@@ -718,7 +761,11 @@
                 }
                 
                 const resultJSON = await response.json();
-                if (resultJSON && resultJSON.status === 'success' && resultJSON.data !== undefined) return resultJSON.data;
+                
+                if (resultJSON && resultJSON.status === 'success' && resultJSON.data !== undefined) {
+                    return resultJSON.data;
+                }
+                
                 return resultJSON;
                 
             } catch (error) {
@@ -761,7 +808,39 @@
                 if(!state.isOfflineMode) {
                     let serverResults = normalizeData(rawResults).map((item, i) => ({ ...item, rowIndex: i }));
 
+                    // --- 🌟 真正的静默对账系统 (Silent Reconciliation) ---
                     if (state.unsyncedQueue.length > 0) {
+                        let remainingQueue = [];
+                        let hasReconciled = false;
+
+                        state.unsyncedQueue.forEach(pending => {
+                            let reconciled = false;
+                            const target = serverResults.find(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
+
+                            if (pending.action === 'REG' || pending.action === 'register') {
+                                if (target) reconciled = true; // 云端已经有了！说明刚才假失败真成功
+                            } else if (pending.action === 'SCORE' || pending.action === 'updateScore') {
+                                if (target && String(target.score) === String(pending.score) && String(target.rank) === String(pending.rank)) reconciled = true; // 云端分数已经更新！
+                            } else if (pending.action === 'DEL') {
+                                if (!target) reconciled = true; // 云端已经删除了！
+                            }
+
+                            if (reconciled) {
+                                hasReconciled = true;
+                                const logItem = state.auditLog.find(l => l.id === pending.id);
+                                if (logItem) logItem.syncStatus = 'synced';
+                            } else {
+                                remainingQueue.push(pending);
+                            }
+                        });
+
+                        if (hasReconciled) {
+                            state.unsyncedQueue = remainingQueue;
+                            localStorage.setItem('unsyncedQueue', JSON.stringify(state.unsyncedQueue));
+                            localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
+                        }
+                        
+                        // 将依然未能对账成功（还在断网排队）的数据乐观合并到界面
                         state.unsyncedQueue.forEach(pending => {
                             if (pending.action === 'SCORE' || pending.action === 'updateScore') {
                                 const target = serverResults.find(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
@@ -770,7 +849,7 @@
                                 const exists = serverResults.some(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
                                 if (!exists) { serverResults.push({ studentName: pending.name, studentClass: pending.stuClass, category: pending.category, score: '', rank: '', note: pending.note || '', rowIndex: `pending-${pending.id}` }); }
                             } else if (pending.action === 'DEL') {
-                                serverResults = serverResults.filter(s => !(s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === state.selectedCategory));
+                                serverResults = serverResults.filter(s => !(s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category));
                             }
                         });
                     }
@@ -823,6 +902,9 @@
             fetchAllData(silent);
         };
 
+        // --- 6. 事件控制器总线 (Application Handlers Bus) ---
+        
+        // 🌟 统一错误拦截器 (处理未授权或密码失效问题)
         const handleAdminError = (e, defaultMsg) => {
             console.error(e);
             if (e.message && (e.message.includes('Unauthorized') || e.message.includes('password') || e.message.includes('Invalid'))) {
@@ -837,6 +919,7 @@
             }
         };
 
+        // 🌟 洗牌算法：随机打乱当前比赛的出场名单
         const shuffleCurrentCategory = () => {
             const catName = state.selectedCategory;
             if (!catName) return;
@@ -844,6 +927,7 @@
             const currentRecords = state.dbResults.filter(r => r.category === catName);
             const otherRecords = state.dbResults.filter(r => r.category !== catName);
             
+            // Fisher-Yates 洗牌算法
             for (let i = currentRecords.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [currentRecords[i], currentRecords[j]] = [currentRecords[j], currentRecords[i]];
@@ -854,6 +938,7 @@
             showToast('名单已成功随机打乱！现在打印即为抽签顺序。', 'success');
         };
 
+        // 🌟 修复：应用系统内置的 showDialog 弹窗替换掉在沙盒环境中失效的原生 confirm()
         const goHome = async () => {
             if (state.isBatchEditing) {
                 const confirmed = await showDialog({ type: 'confirm', title: '确认返回', message: '您正在批量录分中，未保存的改动将丢失，确定返回首页吗？', icon: 'fas fa-exclamation-triangle text-amber-500' });
@@ -950,6 +1035,7 @@
             updateDOM();
         };
         
+        // --- 学生光荣榜专属控制器 ---
         const toggleStudentViewMode = (mode) => {
             state.studentRecordsViewMode = mode;
             localStorage.setItem('app_student_view', mode);
@@ -962,6 +1048,7 @@
             updateDOM();
         };
 
+        // 🌟 纯净版复制功能 (包含智能名次翻译)
         const copyStudentRecords = (encodedStuName, encodedStuClass, encodedAwardsJson) => {
             const awards = JSON.parse(decodeURIComponent(encodedAwardsJson));
             
@@ -983,6 +1070,7 @@
             document.body.removeChild(textArea);
         };
 
+        // 🌟 导出光荣榜到 Excel
         const exportStudentRecordsToExcel = () => {
             let awards = state.dbResults.filter(r => r.rank && r.rank.trim() !== '');
             if (state.studentSearchQuery) {
@@ -1018,7 +1106,7 @@
             
             sortedStudents.forEach(stu => {
                 const records = stu.awards.sort((a, b) => getRankWeight(b.rank) - getRankWeight(a.rank))
-                    .map(a => `${a.category} - ${smartRank(a.rank, a.category)}`) 
+                    .map(a => `${a.category} - ${smartRank(a.rank, a.category)}`) // 无圆点纯净格式
                     .join('\r\n');
                 ws_data.push([stu.class, stu.name, stu.awards.length, records]);
             });
@@ -1032,6 +1120,7 @@
         };
 
 
+        // --- 批量评分与时光回溯 (Batch Edit with Snapshot Undo) ---
         const startBatchEdit = async () => {
             state.batchEditData = JSON.parse(JSON.stringify(getSelectedGroupedByGrade()));
             state.historySnapshot = null;
@@ -1069,6 +1158,7 @@
                 });
 
                 const sortedEntities = Array.from(entities.values()).sort((a, b) => b.score - a.score);
+                // 🌟 修复：拓展自动排名的计算容量，支持到前10名
                 const topRanks = ['冠军', '亚军', '季军', '第四名', '第五名', '第六名', '第七名', '第八名', '第九名', '第十名'];
 
                 let actualPosition = 1; 
@@ -1123,6 +1213,7 @@
             state.auditLog = [...updates, ...state.auditLog].slice(0, 50);
             localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
 
+            // 乐观更新
             updates.forEach(u => {
                 const target = state.dbResults.find(s => s.studentName === u.name && s.studentClass === u.stuClass && s.category === u.category);
                 if(target){ target.score = u.score; target.rank = u.rank; }
@@ -1218,6 +1309,7 @@
             } else if (index === inputs.length - 1) showToast('已经是最后一个学生啦', 'success');
         };
 
+        // --- 7. 报名提交逻辑 (Registration Operations) ---
         const addClassGroup = () => {
             state.form.groups.push({ id: Date.now(), class: '', teamName: '', students: [''], notes: [''] });
             updateDOM();
@@ -1313,7 +1405,7 @@
                 name: entry.studentName,
                 stuClass: entry.studentClass,
                 category: entry.category,
-                note: entry.note, 
+                note: entry.note, // 🌟 发送题目备注数据到本地防丢队列
                 timestamp: new Date().toLocaleTimeString('zh-CN'),
                 action: 'REG',
                 syncStatus: 'pending',
@@ -1354,6 +1446,7 @@
             })();
         };
 
+        // 🌟 修复：应用安全的 escapeStr 以防单引号断层
         const deleteRegistration = async (stuName, className) => {
             if (!await showDialog({ type: 'confirm', title: '确认删除', message: `确定要删除选手 ${formatName(stuName)} 吗？`, icon: 'fas fa-user-minus text-rose-500' })) return;
             state.isSubmitting = true;
@@ -1379,6 +1472,7 @@
             } catch (e) { console.error(e); } finally { state.isSubmitting = false; updateDOM(); }
         };
 
+        // --- 8. 评分弹窗控制 (Individual Score Modal) ---
         const openScoreModal = (stuName, className, score, rank, note) => {
             state.modals.score = {
                 visible: true,
@@ -1442,6 +1536,7 @@
             } catch(e) { console.error(e); } finally { state.isSubmitting = false; updateDOM(); }
         };
 
+        // --- 9. 项目管理与后台管理 (Admin Control Actions) ---
         const openEditCategory = (itemJSON) => {
             const item = JSON.parse(decodeURIComponent(itemJSON));
             state.modals.editCategory = {
@@ -1516,6 +1611,7 @@
             } finally { state.isSubmitting = false; updateDOM(); }
         };
 
+        // --- 10. 报表打印与海报生成 (Report Printing & Poster Canvas) ---
         const generatePrintHtml = (title, tableContent) => {
             const categoryName = state.selectedCategory;
             const date = formatDate(new Date()); 
@@ -1719,6 +1815,7 @@
             updateDOM();
         };
 
+        // --- 11. 自定义通用弹窗驱动 (Dialog Manager) ---
         const handleModalCancel = () => {
             if (modalAutoCloseTimer) clearTimeout(modalAutoCloseTimer);
             state.modals.dialog.resolve(false); 
@@ -1778,6 +1875,7 @@
             updateDOM();
         };
 
+        // --- 12. PWA 机制初始化与自愈 (Self-Healing Cache & PWA) ---
         const initLocalCache = () => {
             try {
                 const storedItems = localStorage.getItem('school_comp_items_v2');
@@ -1844,6 +1942,7 @@
             });
         };
 
+        // --- 13. DOM 动态流式渲染引擎 (State-Driven Custom Rendering Engine) ---
         const nextTick = (cb) => setTimeout(cb, 16);
 
         const updateDOM = () => {
@@ -1855,6 +1954,7 @@
 
             const app = document.getElementById('app');
             app.innerHTML = `
+                <!-- Navbar -->
                 <nav class="bg-indigo-600 text-white shadow-lg sticky top-0 z-40 no-print font-kai">
                     <div class="container mx-auto px-4 py-3 flex justify-between items-center">
                         <div onclick="app.goHome()" class="flex items-center space-x-2 cursor-pointer group relative">
@@ -1888,10 +1988,12 @@
                     </div>
                 </nav>
 
+                <!-- 容器框架 -->
                 <main class="flex-grow container mx-auto px-4 py-6 max-w-5xl">
                     ${renderActiveTab()}
                 </main>
 
+                <!-- 挂载弹窗组件 -->
                 ${renderModals()}
             `;
 
@@ -2967,14 +3069,17 @@
             `;
         };
 
+        // --- 17. 最终主入口挂载生命周期 (Main LifeCycle Mounting) ---
         const onMounted = () => {
             initPWA();
             initLocalCache();
             fetchAllData();
             
+            // 定时后台刷新 (每60秒)
             autoRefreshTimer = setInterval(() => { fetchAllData(true); }, 60000); 
         };
 
+        // 统一全局接口，使 HTML 内 onclick 绑定 safe 运行
         window.app = {
             goToStudentRecords: () => { state.currentTab = 'student_records'; state.studentSearchQuery = ''; updateDOM(); },
             toggleStudentViewMode,
@@ -3039,6 +3144,7 @@
             refreshData: (background = false) => fetchAllData(background)
         };
 
+        // 启动系统
         onMounted();
     </script>
 </body>
