@@ -788,7 +788,23 @@
             try {
                 const items = await fetchAPI('getCompetitions');
                 if(!state.isOfflineMode) {
-                    state.competitionItems = Array.isArray(items) ? items.map(i => typeof i === 'string' ? {name: i, organizer: '', status: 'open', startDate: '', endDate: ''} : i) : [];
+                    state.competitionItems = Array.isArray(items) ? items.map(item => {
+                        if (typeof item === 'string') return {name: item, organizer: '', status: 'open', startDate: '', endDate: ''};
+                        
+                        // 🛡️ 智能雷达引擎：无论谷歌表格表头叫大写Name、小写name还是中文，都能自动识别对齐！
+                        const normalized = { status: 'open', startDate: '', endDate: '', organizer: '' };
+                        Object.keys(item).forEach(key => {
+                            const k = key.toLowerCase().replace(/\s+/g, '');
+                            if (['name', '比赛', '名称', '项目', 'item'].some(x => k.includes(x))) normalized.name = item[key];
+                            else if (['organizer', '主办', 'anjuran'].some(x => k.includes(x))) normalized.organizer = item[key];
+                            else if (['status', '状态'].some(x => k.includes(x))) normalized.status = item[key];
+                            else if (['start', '开始', 'mula'].some(x => k.includes(x))) normalized.startDate = item[key];
+                            else if (['end', '结束', '截止', 'tamat'].some(x => k.includes(x))) normalized.endDate = item[key];
+                            else normalized[key] = item[key];
+                        });
+                        if (!normalized.name) normalized.name = item.Name || item.name || '';
+                        return normalized;
+                    }) : [];
                 }
 
                 const rawStudents = await fetchAPI('getStudents');
