@@ -372,7 +372,7 @@
                 btn_shuffle: "Shuffle List",
                 btn_poster: "Poster",
                 btn_print_options: "Print",
-                btn_export_csv: "Export Excel",
+                btn_export_excel: "Export Excel",
                 print_roster: "Name List",
                 print_score_sheet: "Scoring Sheet",
                 print_winners: "Winners List",
@@ -2847,14 +2847,16 @@
                             <button onclick="app.closeScoreModal()" class="p-1 -mr-2 text-indigo-200 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
                         <div class="p-6 space-y-5 overflow-y-auto shrink-0">
-                            <div class="bg-indigo-50 p-4 rounded-xl text-base text-indigo-900 border border-indigo-100 shadow-sm">
-                                <div class="flex items-center justify-between">
-                                    <span class="font-bold font-mono bg-white px-2 py-1 rounded shadow-sm">${m.className}</span>
-                                    <span class="font-bold text-lg text-right break-words max-w-[65%]">${formatName(m.studentName)}</span>
-                                </div>
-                                ${m.note ? `<div class="mt-3 pt-3 border-t border-indigo-200/60 text-sm text-indigo-700 font-medium"><i class="fas fa-quote-left mr-1.5 opacity-50"></i>题目：${m.note}</div>` : ''}
+                            <div class="bg-indigo-50 p-4 rounded-xl text-base text-indigo-900 border border-indigo-100 flex items-center justify-between shadow-sm">
+                                <span class="font-bold font-mono bg-white px-2 py-1 rounded shadow-sm">${m.className}</span>
+                                <span class="font-bold text-lg text-right break-words max-w-[65%]">${formatName(m.studentName)}</span>
                             </div>
                             
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-1.5">${t('th_note')} / 题目</label>
+                                <input type="text" id="indiv-note" value="${m.note}" oninput="state.modals.score.note = this.value" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-bold text-slate-700 transition" placeholder="输入题目或备注 (选填)">
+                            </div>
+
                             <div>
                                 <label class="block text-sm font-bold text-slate-700 mb-1.5">${t('th_score')}</label>
                                 <input type="number" step="0.1" inputmode="decimal" id="indiv-score" value="${m.score}" oninput="state.modals.score.score = this.value" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-lg font-bold text-indigo-700 transition" placeholder="-">
