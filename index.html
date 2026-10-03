@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>新廊华小校内竞赛管理系统</title>
     
     <!-- PWA 配置支持 -->
@@ -71,12 +71,16 @@
         <!-- DOM 渲染将由 JavaScript 完全接管 -->
     </div>
 
+    <script src="app-sync.js"></script>
+    <script src="app-actions.js"></script>
     <script>
         // --- 1. 全局配置与状态 (State) ---
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzR8nuH_7_26D0EeuDeSnnSJ0dfSAsS052h9OBH_J_F8jOrGhnYVvK8PsRT1lREKdFK/exec"; 
+        const PRODUCTION_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzR8nuH_7_26D0EeuDeSnnSJ0dfSAsS052h9OBH_J_F8jOrGhnYVvK8PsRT1lREKdFK/exec"; 
         
         const urlParams = new URLSearchParams(window.location.search);
         const isTestEnv = urlParams.get('test') === '1';
+        const TEST_SCRIPT_URL = ''; // Configure an independent test deployment before using ?test=1.
+        const GOOGLE_SCRIPT_URL = isTestEnv ? TEST_SCRIPT_URL : PRODUCTION_SCRIPT_URL;
         const currentYear = new Date().getFullYear().toString();
 
         let autoRefreshTimer = null;
@@ -103,8 +107,9 @@
             dbResults: [],
             batchEditData: [], 
             historySnapshot: null, 
-            auditLog: JSON.parse(localStorage.getItem('localAuditLog') || '[]'),
-            unsyncedQueue: JSON.parse(localStorage.getItem('unsyncedQueue') || '[]'),
+            auditLog: [],
+            unsyncedQueue: [],
+            studentRows: [], role: '', availableYears: [], lastSync: '', legacyPending: [],
             searchQuery: '',
             
             // 学生光荣榜专属状态
@@ -572,14 +577,7 @@
         const getStudentsByClass = (className) => state.studentDB[className] || [];
 
         // --- 4. 数据一致性衍生状态机 (Computed Properties) ---
-        const getAvailableYears = () => {
-            const years = new Set([currentYear]);
-            state.competitionItems.forEach(item => {
-                if (item.startDate) years.add(item.startDate.substring(0, 4));
-                if (item.endDate) years.add(item.endDate.substring(0, 4));
-            });
-            return Array.from(years).sort((a, b) => b - a);
-        };
+        const getAvailableYears = () => Array.from(new Set([currentYear, String(Number(currentYear)+1), state.selectedYear, ...state.availableYears])).sort((a,b)=>b-a);
 
         const getActiveCompetitions = () => {
             return state.competitionItems.filter(i => {
@@ -600,7 +598,7 @@
             }
             
             const filteredItems = state.competitionItems.filter(item => {
-                const itemYear = item.startDate ? item.startDate.substring(0, 4) : currentYear;
+                const itemYear = String(item.year);
                 return itemYear === state.selectedYear;
             });
             
@@ -689,235 +687,6 @@
             });
         };
 
-        // --- 5. 统一数据交互引擎 (Data Sync Network Engine) ---
-        const fetchWithRealCheck = async (url, payload, action, timeout = 30000, overridePwd = null) => {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), timeout);
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
-                    body: JSON.stringify({ 
-                        ...payload,
-                        action: action,
-                        auth_pwd: overridePwd !== null ? overridePwd : state.adminPwd 
-                    }),
-                    redirect: 'follow',
-                    signal: controller.signal
-                });
-                clearTimeout(id);
-                if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-                const result = await response.json();
-                if (result.status !== 'success') throw new Error(result.message || 'Server rejected');
-                return result;
-            } catch (error) {
-                clearTimeout(id);
-                if (error.name === 'AbortError' || (error.message && error.message.includes('aborted'))) {
-                    throw new Error('Request Timeout (Google Apps Script 冷启动超时)');
-                }
-                throw error;
-            }
-        };
-
-        const fetchWithRetry = async (url, options, retries = 2, delay = 2000) => {
-            try {
-                const res = await fetch(url, options);
-                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-                return res;
-            } catch (err) {
-                if (retries > 0 && !state.isOfflineMode) { 
-                    await new Promise(r => setTimeout(r, delay));
-                    return fetchWithRetry(url, options, retries - 1, delay * 2);
-                }
-                throw err;
-            }
-        };
-
-        const mockAPI = (action) => new Promise(resolve => setTimeout(() => {
-            if (action === 'getCompetitions') resolve(state.competitionItems || []);
-            else if (action === 'getStudents') resolve([]); 
-            else if (action === 'getResults') resolve(state.dbResults || []);
-            else resolve({ status: 'success', message: '离线模式运行中' });
-        }, 300));
-
-        // 🌟 核心引擎修复：解决最新 GAS 返回带有 data Wrapper 导致界面为空的致命 Bug
-        const fetchAPI = async (action, payload = null) => {
-            if (GOOGLE_SCRIPT_URL.includes("在此处粘贴")) {
-                state.isOfflineMode = true;
-                return await mockAPI(action);
-            }
-            if (state.isOfflineMode) return await mockAPI(action);
-            try {
-                let response;
-                if (payload) { 
-                    response = await fetchWithRetry(GOOGLE_SCRIPT_URL, { 
-                        method: 'POST', 
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
-                        body: JSON.stringify({ ...payload, action: action }),
-                        redirect: 'follow'
-                    });
-                } else { 
-                    response = await fetchWithRetry(`${GOOGLE_SCRIPT_URL}?action=${action}&_t=${new Date().getTime()}&year=${state.selectedYear}`, { method: 'GET', redirect: 'follow' });
-                }
-                
-                const resultJSON = await response.json();
-                
-                if (resultJSON && resultJSON.status === 'success' && resultJSON.data !== undefined) {
-                    return resultJSON.data;
-                }
-                
-                return resultJSON;
-                
-            } catch (error) {
-                if (!state.isOfflineMode) {
-                    state.isOfflineMode = true;
-                    showToast("网络连接受阻，系统已切换至本机离线模式。", "warning");
-                }
-                return await mockAPI(action);
-            }
-        };
-
-        const fetchAllData = async (isBackground = false) => {
-            if (isBackground) {
-                if (state.unsyncedQueue.length > 0 && !state.isOfflineMode) app.syncQueueData(true);
-                const isInteracting = state.isBatchEditing || state.currentTab !== 'results' || state.modals.score.visible || state.modals.editCategory.visible || state.modals.poster.visible || state.modals.dialog.visible;
-                if (isInteracting) return; 
-            }
-            
-            if (!isBackground) { state.isRefreshing = true; updateDOM(); }
-            try {
-                const items = await fetchAPI('getCompetitions');
-                if(!state.isOfflineMode) {
-                    state.competitionItems = Array.isArray(items) ? items.map(item => {
-                        if (typeof item === 'string') return {name: item, organizer: '', status: 'open', startDate: '', endDate: ''};
-                        
-                        // 🛡️ 智能雷达引擎：无论谷歌表格表头叫大写Name、小写name还是中文，都能自动识别对齐！
-                        const normalized = { status: 'open', startDate: '', endDate: '', organizer: '' };
-                        Object.keys(item).forEach(key => {
-                            const k = key.toLowerCase().replace(/\s+/g, '');
-                            if (['name', '比赛', '名称', '项目', 'item'].some(x => k.includes(x))) normalized.name = item[key];
-                            else if (['organizer', '主办', 'anjuran'].some(x => k.includes(x))) normalized.organizer = item[key];
-                            else if (['status', '状态'].some(x => k.includes(x))) normalized.status = item[key];
-                            else if (['start', '开始', 'mula'].some(x => k.includes(x))) normalized.startDate = item[key];
-                            else if (['end', '结束', '截止', 'tamat'].some(x => k.includes(x))) normalized.endDate = item[key];
-                            else normalized[key] = item[key];
-                        });
-                        if (!normalized.name) normalized.name = item.Name || item.name || '';
-                        return normalized;
-                    }) : [];
-                }
-
-                const rawStudents = await fetchAPI('getStudents');
-                const db = {};
-                normalizeData(rawStudents).forEach(s => {
-                    if(s.studentClass && s.studentName) {
-                        if (!db[s.studentClass]) db[s.studentClass] = [];
-                        db[s.studentClass].push(s.studentName);
-                    }
-                });
-                if(!state.isOfflineMode) {
-                    state.studentDB = db;
-                    state.classList = Object.keys(state.studentDB).sort();
-                }
-
-                const rawResults = await fetchAPI('getResults');
-                if(!state.isOfflineMode) {
-                    let serverResults = normalizeData(rawResults).map((item, i) => ({ ...item, rowIndex: i }));
-
-                    // --- 🌟 真正的静默对账系统 (Silent Reconciliation) ---
-                    if (state.unsyncedQueue.length > 0) {
-                        let remainingQueue = [];
-                        let hasReconciled = false;
-
-                        state.unsyncedQueue.forEach(pending => {
-                            let reconciled = false;
-                            const target = serverResults.find(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
-
-                            if (pending.action === 'REG' || pending.action === 'register') {
-                                if (target) reconciled = true; // 云端已经有了！说明刚才假失败真成功
-                            } else if (pending.action === 'SCORE' || pending.action === 'updateScore') {
-                                if (target && String(target.score) === String(pending.score) && String(target.rank) === String(pending.rank)) reconciled = true; // 云端分数已经更新！
-                            } else if (pending.action === 'DEL') {
-                                if (!target) reconciled = true; // 云端已经删除了！
-                            }
-
-                            if (reconciled) {
-                                hasReconciled = true;
-                                const logItem = state.auditLog.find(l => l.id === pending.id);
-                                if (logItem) logItem.syncStatus = 'synced';
-                            } else {
-                                remainingQueue.push(pending);
-                            }
-                        });
-
-                        if (hasReconciled) {
-                            state.unsyncedQueue = remainingQueue;
-                            localStorage.setItem('unsyncedQueue', JSON.stringify(state.unsyncedQueue));
-                            localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
-                        }
-                        
-                        // 将依然未能对账成功（还在断网排队）的数据乐观合并到界面
-                        state.unsyncedQueue.forEach(pending => {
-                            if (pending.action === 'SCORE' || pending.action === 'updateScore') {
-                                const target = serverResults.find(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
-                                if (target) { target.score = pending.score; target.rank = pending.rank; }
-                            } else if (pending.action === 'REG' || pending.action === 'register') {
-                                const exists = serverResults.some(s => s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category);
-                                if (!exists) { serverResults.push({ studentName: pending.name, studentClass: pending.stuClass, category: pending.category, score: '', rank: '', note: pending.note || '', rowIndex: `pending-${pending.id}` }); }
-                            } else if (pending.action === 'DEL') {
-                                serverResults = serverResults.filter(s => !(s.studentName === pending.name && s.studentClass === pending.stuClass && s.category === pending.category));
-                            }
-                        });
-                    }
-                    state.dbResults = serverResults;
-                }
-            } catch (e) {
-                if (!isBackground) state.competitionItems = initItemsFromStorage();
-            } finally {
-                state.isInitializing = false;
-                state.isRefreshing = false;
-                localStorage.setItem('school_comp_items_v2', JSON.stringify(state.competitionItems));
-                localStorage.setItem('school_comp_students_v2', JSON.stringify(state.studentDB));
-                localStorage.setItem('school_comp_results_v2', JSON.stringify(state.dbResults));
-                updateDOM();
-            }
-        };
-
-        const syncQueueData = async (silent = false) => {
-            if (state.isSubmitting || state.unsyncedQueue.length === 0) return;
-            state.isSubmitting = true;
-            if (!silent) updateDOM();
-            
-            let successCount = 0;
-            const remaining = [...state.unsyncedQueue];
-
-            for (let i = remaining.length - 1; i >= 0; i--) {
-                const item = remaining[i];
-                try {
-                    let actionType = 'register';
-                    if (item.action === 'SCORE' || item.action === 'updateScore') actionType = 'updateScore';
-                    else if (item.action === 'DEL') actionType = 'deleteRegistration';
-                    
-                    await fetchWithRealCheck(GOOGLE_SCRIPT_URL, item, actionType);
-                    remaining.splice(i, 1);
-                    
-                    const logItem = state.auditLog.find(l => l.id === item.id);
-                    if (logItem) logItem.syncStatus = 'synced';
-                    successCount++;
-                } catch (e) { console.error("同步阻断:", e); break; }
-            }
-            
-            state.unsyncedQueue = remaining;
-            state.isSubmitting = false;
-            
-            localStorage.setItem('unsyncedQueue', JSON.stringify(state.unsyncedQueue));
-            localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
-            
-            if (!silent && successCount > 0) showToast(`🎉 成功安全上云补传了 ${successCount} 条数据！`);
-            if (!silent && remaining.length > 0) showToast(`仍有 ${remaining.length} 条数据未能同步。`, 'error');
-            fetchAllData(silent);
-        };
-
         // --- 6. 事件控制器总线 (Application Handlers Bus) ---
         
         // 🌟 统一错误拦截器 (处理未授权或密码失效问题)
@@ -987,39 +756,13 @@
             updateDOM();
         };
 
-        const goToRegister = (cat) => {
+        const goToRegister = async (cat) => {
+            if (!await ensureSignedIn()) return;
             state.currentTab = 'register';
             state.form.category = cat;
             state.form.isTeamBundle = false;
             state.form.groups = [{ id: Date.now(), class: '', teamName: '', students: [''], notes: [''] }];
             updateDOM();
-        };
-
-        const enterAdmin = async () => {
-            if (state.isAdmin) {
-                state.currentTab = 'admin';
-                state.selectedCategory = null;
-                updateDOM();
-                return;
-            }
-            const pwd = await showDialog({ type: 'password', title: t('admin_title'), message: t('ph_password'), placeholder: '***', icon: 'fas fa-lock text-indigo-500', confirmText: t('btn_login') });
-            
-            if (pwd !== false && pwd !== '') { 
-                state.isSubmitting = true;
-                updateDOM();
-                try {
-                    await fetchWithRealCheck(GOOGLE_SCRIPT_URL, {}, 'verifyPassword', 15000, pwd);
-                    state.isAdmin = true; 
-                    state.adminPwd = pwd; 
-                    await showDialog({ title: '登录成功', message: '管理模式已开启', showButtons: false, autoClose: 1000, icon: 'fas fa-check-circle text-emerald-500' });
-                    state.currentTab = 'admin';
-                } catch(e) {
-                    showDialog({ title: '验证失败', message: '密码错误或网络超时，请重试！', icon: 'fas fa-times-circle text-rose-500' });
-                } finally {
-                    state.isSubmitting = false;
-                    updateDOM();
-                }
-            }
         };
 
         const toggleLang = () => {
@@ -1028,12 +771,6 @@
             state.lang = langs[nextIdx];
             localStorage.setItem('app_lang', state.lang);
             updateDOM();
-        };
-
-        const changeYear = (e) => {
-            state.selectedYear = e.target.value;
-            localStorage.setItem('app_selected_year', state.selectedYear);
-            fetchAllData();
         };
 
         const changeFilter = (filter) => {
@@ -1046,7 +783,8 @@
             updateDOM();
         };
 
-        const toggleScoreInput = () => {
+        const toggleScoreInput = async () => {
+            if (!await ensureSignedIn()) return;
             state.showScoreInput = !state.showScoreInput;
             updateDOM();
         };
@@ -1101,7 +839,7 @@
             awards.forEach(a => {
                 const pureName = a.studentName.replace(/\s*\[.*?\]$/, '').trim();
                 const cleanName = formatName(pureName);
-                const key = `${a.studentClass}-${cleanName}`;
+                const key = a.studentId || JSON.stringify([a.studentClass, pureName]);
                 if (!studentMap[key]) {
                     studentMap[key] = { name: cleanName, class: a.studentClass, awards: [], totalWeight: 0 };
                 }
@@ -1138,6 +876,7 @@
 
         // --- 批量评分与时光回溯 (Batch Edit with Snapshot Undo) ---
         const startBatchEdit = async () => {
+            if (!await ensureSignedIn()) return;
             state.batchEditData = JSON.parse(JSON.stringify(getSelectedGroupedByGrade()));
             state.historySnapshot = null;
             state.isBatchEditing = true;
@@ -1165,7 +904,7 @@
                         stu.rank = ''; 
                         const score = parseFloat(stu.score);
                         if (!isNaN(score)) {
-                            const teamName = extractTeamName(stu.studentName);
+                            const teamName = stu.teamId;
                             const entityKey = teamName ? `TEAM_${teamName}` : `INDIV_${stu.studentName}_${cls.className}`;
                             if (!entities.has(entityKey)) entities.set(entityKey, { score: score, students: [] });
                             entities.get(entityKey).students.push(stu);
@@ -1193,72 +932,6 @@
             }
         };
 
-        const saveBatchEdit = async () => {
-            state.isSubmitting = true;
-            updateDOM();
-            const updates = [];
-            
-            state.batchEditData.forEach(group => {
-                group.classes.forEach(cls => {
-                    cls.students.forEach(stu => {
-                        const original = state.dbResults.find(orig => orig.studentName === stu.studentName && orig.studentClass === cls.className && orig.category === state.selectedCategory);
-                        if (original) {
-                            const newScore = String(stu.score || '').trim(), newRank = String(stu.rank || '').trim();
-                            const oldScore = String(original.score || '').trim(), oldRank = String(original.rank || '').trim();
-                            if (newScore !== oldScore || newRank !== oldRank) {
-                                updates.push({ 
-                                    id: `U_${Date.now()}_${Math.floor(Math.random()*1000)}`, 
-                                    name: stu.studentName, stuClass: cls.className, category: state.selectedCategory, 
-                                    score: newScore, rank: newRank,
-                                    timestamp: new Date().toLocaleTimeString('zh-CN'),
-                                    action: 'SCORE', syncStatus: 'pending' 
-                                });
-                            }
-                        }
-                    });
-                });
-            });
-
-            if (updates.length === 0) {
-                state.isSubmitting = false;
-                state.isBatchEditing = false;
-                updateDOM();
-                return;
-            }
-
-            state.auditLog = [...updates, ...state.auditLog].slice(0, 50);
-            localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
-
-            // 乐观更新
-            updates.forEach(u => {
-                const target = state.dbResults.find(s => s.studentName === u.name && s.studentClass === u.stuClass && s.category === u.category);
-                if(target){ target.score = u.score; target.rank = u.rank; }
-            });
-            
-            state.isBatchEditing = false;
-            state.historySnapshot = null; 
-            state.isSubmitting = false;
-            showToast(`正在安全加密上传 ${updates.length} 条记录...`);
-            updateDOM();
-
-            (async () => {
-                for (let u of updates) {
-                    try {
-                        await fetchWithRealCheck(GOOGLE_SCRIPT_URL, u, 'updateScore');
-                        const logItem = state.auditLog.find(l => l.id === u.id);
-                        if (logItem) logItem.syncStatus = 'synced';
-                    } catch (e) {
-                        state.unsyncedQueue.push(u);
-                        localStorage.setItem('unsyncedQueue', JSON.stringify(state.unsyncedQueue));
-                    }
-                }
-                localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
-                if (state.unsyncedQueue.length === 0) showToast(`✅ 所有数据已成功上云！`);
-                else showToast(`⚠️ 部分网络请求失败，已安全存于本机，请稍后补传。`, 'warning');
-                fetchAllData(true); 
-            })();
-        };
-
         const syncTeamScore = (indexStr) => {
             const el = document.getElementById(`batch-score-${indexStr}`);
             if(!el) return;
@@ -1267,12 +940,12 @@
             if (!stu) return;
             stu.score = val;
             
-            const teamName = extractTeamName(stu.studentName);
+            const teamName = stu.teamId;
             if (!teamName) return;
             state.batchEditData.forEach(group => {
                 group.classes.forEach(cls => {
                     cls.students.forEach(s => {
-                        if (s.rowIndex !== indexStr && extractTeamName(s.studentName) === teamName) {
+                        if (s.rowIndex !== indexStr && s.teamId === teamName) {
                             s.score = val;
                             const inputEl = document.getElementById(`batch-score-${s.rowIndex}`);
                             if (inputEl) inputEl.value = val;
@@ -1289,12 +962,12 @@
             if (!stu) return;
             stu.rank = val;
 
-            const teamName = extractTeamName(stu.studentName);
+            const teamName = stu.teamId;
             if (!teamName) return;
             state.batchEditData.forEach(group => {
                 group.classes.forEach(cls => {
                     cls.students.forEach(s => {
-                        if (s.rowIndex !== indexStr && extractTeamName(s.studentName) === teamName) {
+                        if (s.rowIndex !== indexStr && s.teamId === teamName) {
                             s.rank = val;
                             const selectEl = document.getElementById(`batch-rank-${s.rowIndex}`);
                             if (selectEl) selectEl.value = val;
@@ -1366,265 +1039,18 @@
             updateDOM();
         };
 
-        const submitForm = async () => {
-            state.isSubmitting = true;
-            updateDOM();
-            
-            let allEntries = [];
-            state.form.groups.forEach(group => {
-                if (!group.class) return;
-                group.students.forEach((stuName, sIndex) => {
-                    if (stuName && stuName.trim()) {
-                        let finalName = stuName.trim();
-                        if (state.form.isTeamBundle && group.teamName && group.teamName.trim()) {
-                            finalName = `${finalName} [${group.teamName.trim()}]`;
-                        }
-                        const noteVal = group.notes && group.notes[sIndex] ? group.notes[sIndex].trim() : "";
-                        allEntries.push({ studentName: finalName, studentClass: group.class, category: state.form.category, note: noteVal });
-                    }
-                });
-            });
-
-            const uniqueEntries = [];
-            const seen = new Set();
-            allEntries.forEach(entry => {
-                const key = `${entry.studentClass}-${entry.studentName}`;
-                if (!seen.has(key)) { seen.add(key); uniqueEntries.push(entry); }
-            });
-
-            if (uniqueEntries.length === 0) { 
-                state.isSubmitting = false; 
-                updateDOM();
-                return showDialog({ title: '提示', message: '请至少选择一个学生代表。' }); 
-            }
-
-            const currentCatStudents = state.dbResults.filter(s => s.category === state.form.category);
-            const duplicates = [];
-            const finalEntries = uniqueEntries.filter(entry => {
-                const isDup = currentCatStudents.some(s => s.studentName === entry.studentName && s.studentClass === entry.studentClass);
-                if (isDup) duplicates.push(`${entry.studentName}(${entry.studentClass})`);
-                return !isDup;
-            });
-
-            if (duplicates.length > 0) {
-                await showDialog({ type: 'alert', title: '重复报名', message: `以下选手已存在，将自动忽略：\n${duplicates.join(', ')}` });
-            }
-            if (finalEntries.length === 0) { 
-                state.isSubmitting = false; 
-                updateDOM();
-                return; 
-            }
-
-            let tempId = Date.now();
-            const pendingRegs = finalEntries.map(entry => ({
-                id: `R_${Date.now()}_${Math.floor(Math.random()*1000)}`,
-                name: entry.studentName,
-                stuClass: entry.studentClass,
-                category: entry.category,
-                note: entry.note, // 🌟 发送题目备注数据到本地防丢队列
-                timestamp: new Date().toLocaleTimeString('zh-CN'),
-                action: 'REG',
-                syncStatus: 'pending',
-                rowIndex: `temp-${tempId++}`,
-                studentName: entry.studentName,
-                studentClass: entry.studentClass
-            }));
-
-            state.auditLog = [...pendingRegs, ...state.auditLog].slice(0, 50);
-            localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
-            pendingRegs.forEach(entry => { state.dbResults.push(entry); });
-
-            showToast(`✅ 本地成功录入 ${finalEntries.length} 人，后台静默云同步中...`);
-            
-            if (state.keepClassInfo) {
-                state.form.groups.forEach(g => { g.students = ['']; g.teamName = ''; g.notes = ['']; });
-            } else { 
-                state.form.category = ''; 
-                state.form.isTeamBundle = false; 
-                state.form.groups = [{ id: Date.now(), class: '', teamName: '', students: [''], notes: [''] }]; 
-            }
-            state.isSubmitting = false;
-            updateDOM();
-
-            (async () => {
-                for (const entry of pendingRegs) {
-                    try {
-                        await fetchWithRealCheck(GOOGLE_SCRIPT_URL, entry, 'register');
-                        const logItem = state.auditLog.find(l => l.id === entry.id);
-                        if (logItem) logItem.syncStatus = 'synced';
-                    } catch(e) { 
-                        state.unsyncedQueue.push(entry); 
-                        localStorage.setItem('unsyncedQueue', JSON.stringify(state.unsyncedQueue));
-                    }
-                }
-                localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
-                fetchAllData(true); 
-            })();
-        };
-
-        // 🌟 修复：应用安全的 escapeStr 以防单引号断层
-        const deleteRegistration = async (stuName, className) => {
-            if (!await showDialog({ type: 'confirm', title: '确认删除', message: `确定要删除选手 ${formatName(stuName)} 吗？`, icon: 'fas fa-user-minus text-rose-500' })) return;
-            state.isSubmitting = true;
-            updateDOM();
-            try {
-                state.dbResults = state.dbResults.filter(s => !(s.studentName === stuName && s.studentClass === className && s.category === state.selectedCategory));
-                showToast(t('toast_success'));
-                
-                try {
-                    await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { name: stuName, stuClass: className, category: state.selectedCategory }, 'deleteRegistration');
-                } catch (e) {
-                    showToast('删除请求已缓存，下次联网同步生效', 'warning');
-                    state.unsyncedQueue.push({
-                        id: `D_${Date.now()}_${Math.floor(Math.random()*1000)}`,
-                        name: stuName, 
-                        stuClass: className, 
-                        category: state.selectedCategory,
-                        action: 'DEL'
-                    });
-                    localStorage.setItem('unsyncedQueue', JSON.stringify(state.unsyncedQueue));
-                }
-                fetchAllData(true);
-            } catch (e) { console.error(e); } finally { state.isSubmitting = false; updateDOM(); }
-        };
-
-        // --- 8. 评分弹窗控制 (Individual Score Modal) ---
-        const openScoreModal = (stuName, className, score, rank, note) => {
-            state.modals.score = {
-                visible: true,
-                studentName: stuName,
-                className: className,
-                score: score || '',
-                rank: rank || '',
-                note: note || '',
-                category: state.selectedCategory
-            };
-            updateDOM();
-        };
-
-        const submitScore = async () => {
-            const modal = state.modals.score;
-            state.isSubmitting = true;
-            updateDOM();
-            try {
-                const teamName = extractTeamName(modal.studentName);
-                const updates = [];
-                if (teamName) {
-                    state.dbResults.forEach(s => {
-                        if (s.category === modal.category && extractTeamName(s.studentName) === teamName) updates.push(s);
-                    });
-                } else {
-                    updates.push(state.dbResults.find(s => s.studentName === modal.studentName && s.studentClass === modal.className && s.category === modal.category));
-                }
-
-                const payloads = updates.filter(u => u).map(u => ({
-                    id: `U_${Date.now()}_${Math.floor(Math.random()*1000)}`, 
-                    name: u.studentName, stuClass: u.studentClass, category: u.category, 
-                    score: modal.score, rank: modal.rank,
-                    timestamp: new Date().toLocaleTimeString('zh-CN'),
-                    action: 'SCORE', syncStatus: 'pending' 
-                }));
-
-                state.auditLog = [...payloads, ...state.auditLog].slice(0, 50);
-                localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
-
-                updates.forEach(u => { if (u) { u.score = modal.score; u.rank = modal.rank; } });
-                state.modals.score.visible = false; 
-                
-                let hasError = false;
-                for (const payload of payloads) {
-                    try {
-                        await fetchWithRealCheck(GOOGLE_SCRIPT_URL, payload, 'updateScore');
-                        const logItem = state.auditLog.find(l => l.id === payload.id);
-                        if (logItem) logItem.syncStatus = 'synced';
-                    } catch (e) {
-                        state.unsyncedQueue.push(payload);
-                        localStorage.setItem('unsyncedQueue', JSON.stringify(state.unsyncedQueue));
-                        hasError = true;
-                    }
-                }
-                
-                localStorage.setItem('localAuditLog', JSON.stringify(state.auditLog));
-                if (hasError) showToast('⚠️ 部分网络异常，已存于本机防丢记录中，请稍后补传', 'warning');
-                else showToast(t('toast_success'));
-                
-                fetchAllData(true);
-            } catch(e) { console.error(e); } finally { state.isSubmitting = false; updateDOM(); }
-        };
-
         // --- 9. 项目管理与后台管理 (Admin Control Actions) ---
         const openEditCategory = (itemJSON) => {
             const item = JSON.parse(decodeURIComponent(itemJSON));
             state.modals.editCategory = {
                 visible: true,
-                oldName: item.name,
+                oldName: item.name, competitionId:item.id, expectedVersion:Number(item.version),
                 newName: item.name,
                 organizer: item.organizer || '',
                 startDate: item.startDate || '',
                 endDate: item.endDate || ''
             };
             updateDOM();
-        };
-
-        const submitEditCategory = async () => {
-            const { oldName, newName, organizer, startDate, endDate } = state.modals.editCategory;
-            if (!newName.trim()) return showDialog({ title: '提示', message: '项目名称不能为空' });
-            state.isSubmitting = true;
-            updateDOM();
-            try {
-                await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { oldName, newName: newName.trim(), organizer: organizer.trim(), startDate, endDate }, 'editCompetition');
-                state.modals.editCategory.visible = false;
-                if (state.selectedCategory === oldName) state.selectedCategory = newName.trim();
-                await fetchAllData(); 
-                showToast(t('toast_success'));
-            } catch(e) { 
-                handleAdminError(e, '编辑失败，可能是服务器阻断或网络超时，请重试。');
-            } finally { state.isSubmitting = false; updateDOM(); }
-        };
-
-        const toggleStatus = async (itemName) => {
-            state.isSubmitting = true;
-            updateDOM();
-            try {
-                await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { name: itemName }, 'toggleStatus');
-                showToast(t('toast_success'));
-                await fetchAllData();
-            } catch(e) { 
-                handleAdminError(e, '无权操作此项目状态或网络超时。');
-            } finally { state.isSubmitting = false; updateDOM(); }
-        };
-
-        const adminAddItem = async (e) => {
-            e.preventDefault();
-            const name = state.adminForm.name.trim();
-            const organizer = state.adminForm.organizer.trim();
-            const startDate = state.adminForm.startDate;
-            const endDate = state.adminForm.endDate;
-            if (!name) return showDialog({ title: '提示', message: '请填写比赛项目名称。' });
-            
-            state.isSubmitting = true;
-            updateDOM();
-            try {
-                await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { name, organizer, startDate, endDate }, 'addCompetition');
-                showToast(t('toast_success'));
-                state.adminForm = { name: '', organizer: '', startDate: '', endDate: '' };
-                await fetchAllData();
-            } catch(e) { 
-                handleAdminError(e, '可能是服务器阻断或网络超时，请重试。');
-            } finally { state.isSubmitting = false; updateDOM(); }
-        };
-
-        const adminDeleteItem = async (name) => {
-            if (!(await showDialog({ type: 'confirm', title: '确认删除', message: `确定要删除 ${name} 吗？\n该操作会同步删除旗下所有报名数据，不可撤销。`, icon: 'fas fa-trash text-rose-500' }))) return;
-            state.isSubmitting = true;
-            updateDOM();
-            try {
-                await fetchWithRealCheck(GOOGLE_SCRIPT_URL, { name }, 'deleteCompetition');
-                showToast(t('toast_success'));
-                await fetchAllData();
-            } catch(e) { 
-                handleAdminError(e, '无权限进行此破坏性操作或网络超时。');
-            } finally { state.isSubmitting = false; updateDOM(); }
         };
 
         // --- 10. 报表打印与海报生成 (Report Printing & Poster Canvas) ---
@@ -1636,14 +1062,14 @@
             const orgStr = groupInfo && groupInfo.organizer ? `${t('label_organizer')}: ${groupInfo.organizer}` : '';
             const dateStr = groupInfo && groupInfo.endDate ? `${t('label_date')}: ${formatDate(groupInfo.endDate)}` : '';
             const subtitleArr = [];
-            if (orgStr) subtitleArr.push(`<span>${orgStr}</span>`);
-            if (dateStr) subtitleArr.push(`<span>${dateStr}</span>`);
+            if (orgStr) subtitleArr.push(`<span>${escapeHTML(orgStr)}</span>`);
+            if (dateStr) subtitleArr.push(`<span>${escapeHTML(dateStr)}</span>`);
             const subtitleHtml = subtitleArr.length > 0 ? `<div class="subtitle" style="display:flex; justify-content:center; gap: 20px;">${subtitleArr.join('')}</div>` : '';
             
-            const printYear = new Date().getFullYear();
+            const printYear = state.selectedYear;
             const schoolHeader = state.lang === 'zh' ? `${printYear}年新廊华小` : `${t('school_header_print')} ${printYear}`;
 
-            return `<html><head><title>${categoryName} - ${title}</title>
+            return `<html><head><title>${escapeHTML(categoryName)} - ${escapeHTML(title)}</title>
                     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.1.0/style.css" />
                     <style>
                         * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
@@ -1670,8 +1096,8 @@
                 </head><body>
                     <div class="screen-controls"><button class="btn btn-close" onclick="window.close()">✖ ${t('btn_close')}</button><button class="btn btn-print" onclick="window.print()">🖨️ ${t('btn_print_options')}</button></div>
                     <div class="spacer"></div>
-                    <div class="header-top font-kai">${schoolHeader}</div>
-                    <h1 class="font-kai">${categoryName} - ${title}</h1>${subtitleHtml}
+                    <div class="header-top font-kai">${escapeHTML(schoolHeader)}</div>
+                    <h1 class="font-kai">${escapeHTML(categoryName)} - ${escapeHTML(title)}</h1>${subtitleHtml}
                     ${tableContent}
                     ${!title.includes(t('print_winners')) ? `<div class="signature"><div>${t('label_signature')}: ________________</div><div>${t('label_date')}: ________________</div></div>` : ''}
                     <div class="generated-date">Generated: ${date}</div>
@@ -1680,14 +1106,14 @@
 
         const printRoster = () => {
             const noteHeader = state.lang === 'zh' ? '题目 / 备注' : (state.lang === 'ms' ? 'Tajuk / Catatan' : 'Topic / Note');
-            let tableContent = `<table><thead><tr><th style="width:5%">${t('th_no')}</th><th style="width:40%">${t('th_name')}</th><th style="width:15%">${t('th_class')}</th><th style="width:40%">${noteHeader}</th></tr></thead><tbody>`;
+            let tableContent = `<table><thead><tr><th style="width:5%">${t('th_no')}</th><th style="width:40%">${t('th_name')}</th><th style="width:15%">${t('th_class')}</th><th style="width:40%">${escapeHTML(noteHeader)}</th></tr></thead><tbody>`;
             getSelectedGroupedByGrade().forEach(group => {
                 const unit = state.lang === 'zh' ? '人' : (state.lang === 'ms' ? ' orang' : ' pax');
-                tableContent += `<tr><td colspan="4" class="grade-header">${group.translatedLabel} (${t('total')} ${group.totalStudents}${unit})</td></tr>`;
+                tableContent += `<tr><td colspan="4" class="grade-header">${escapeHTML(group.translatedLabel)} (${t('total')} ${group.totalStudents}${unit})</td></tr>`;
                 let index = 1;
                 group.classes.forEach(cls => { 
                     cls.students.forEach(stu => { 
-                        tableContent += `<tr><td>${index++}</td><td style="text-align:left;padding-left:10px"><b>${formatName(stu.studentName)}</b></td><td>${cls.className}</td><td style="text-align:left;padding-left:10px">${stu.note || ''}</td></tr>`; 
+                        tableContent += `<tr><td>${index++}</td><td style="text-align:left;padding-left:10px"><b>${escapeHTML(formatName(stu.studentName))}</b></td><td>${escapeHTML(cls.className)}</td><td style="text-align:left;padding-left:10px">${escapeHTML(stu.note || '')}</td></tr>`; 
                     }); 
                 });
             });
@@ -1700,11 +1126,11 @@
             let tableContent = `<table><thead><tr><th style="width:5%">${t('th_no')}</th><th style="width:40%">${t('th_name')}</th><th style="width:10%">${t('th_class')}</th><th style="width:15%">${t('th_score')}</th><th style="width:15%">${t('th_rank')}</th><th style="width:15%">${t('th_note')}</th></tr></thead><tbody>`;
             getSelectedGroupedByGrade().forEach(group => {
                 const unit = state.lang === 'zh' ? '人' : (state.lang === 'ms' ? ' orang' : ' pax');
-                tableContent += `<tr><td colspan="6" class="grade-header">${group.translatedLabel} (${t('total')} ${group.totalStudents}${unit})</td></tr>`;
+                tableContent += `<tr><td colspan="6" class="grade-header">${escapeHTML(group.translatedLabel)} (${t('total')} ${group.totalStudents}${unit})</td></tr>`;
                 let index = 1;
                 group.classes.forEach(cls => { 
                     cls.students.forEach(stu => { 
-                        tableContent += `<tr><td>${index++}</td><td style="text-align:left;padding-left:10px"><b>${formatName(stu.studentName)}</b>${stu.note ? '<br><span style="color:#555;font-size:12px;">' + topicLabel + ': ' + stu.note + '</span>' : ''}</td><td>${cls.className}</td><td>${stu.score||''}</td><td>${t_rank(stu.rank)||''}</td><td></td></tr>`; 
+                        tableContent += `<tr><td>${index++}</td><td style="text-align:left;padding-left:10px"><b>${escapeHTML(formatName(stu.studentName))}</b>${stu.note ? '<br><span style="color:#555;font-size:12px;">' + topicLabel + ': ' + escapeHTML(stu.note) + '</span>' : ''}</td><td>${escapeHTML(cls.className)}</td><td>${escapeHTML(stu.score ?? '')}</td><td>${escapeHTML(t_rank(stu.rank)||'')}</td><td></td></tr>`; 
                     }); 
                 });
             });
@@ -1720,9 +1146,9 @@
                 group.classes.forEach(cls => { cls.students.forEach(stu => { if(stu.rank) winners.push({...stu, className: cls.className}); }); });
                 if(winners.length > 0) {
                     hasWinners = true;
-                    tableContent += `<tr><td colspan="3" class="grade-header">${group.translatedLabel}</td></tr>`;
+                    tableContent += `<tr><td colspan="3" class="grade-header">${escapeHTML(group.translatedLabel)}</td></tr>`;
                     winners.sort((a,b) => (getRankWeight(b.rank) - getRankWeight(a.rank)) || ((parseFloat(b.score)||0) - (parseFloat(a.score)||0)));
-                    winners.forEach(stu => { tableContent += `<tr><td style="font-weight:bold;">${t_rank(stu.rank)}</td><td style="font-weight:bold;">${formatName(stu.studentName)}</td><td>${stu.className}</td></tr>`; });
+                    winners.forEach(stu => { tableContent += `<tr><td style="font-weight:bold;">${escapeHTML(t_rank(stu.rank))}</td><td style="font-weight:bold;">${escapeHTML(formatName(stu.studentName))}</td><td>${escapeHTML(stu.className)}</td></tr>`; });
                 }
             });
             if(!hasWinners) tableContent += `<tr><td colspan="3" style="color:#999; padding:20px;">${t('msg_no_winners')}</td></tr>`;
@@ -1747,7 +1173,7 @@
                             index++,
                             formatName(stu.studentName),
                             cls.className,
-                            stu.score || '',
+                            stu.score ?? '',
                             stu.rank ? t_rank(stu.rank) : '',
                             stu.note || '' 
                         ]);
@@ -1835,7 +1261,8 @@
         const handleModalCancel = () => {
             if (modalAutoCloseTimer) clearTimeout(modalAutoCloseTimer);
             state.modals.dialog.resolve(false); 
-            state.modals.dialog.visible = false; 
+            state.modals.dialog.visible = false;
+            state.modals.dialog.inputValue = '';
             updateDOM();
         };
         
@@ -1886,40 +1313,12 @@
         const handleModalConfirm = () => {
             if (modalAutoCloseTimer) clearTimeout(modalAutoCloseTimer);
             const inputVal = document.getElementById('modal-input') ? document.getElementById('modal-input').value : '';
-            state.modals.dialog.resolve(state.modals.dialog.type === 'confirm' ? true : inputVal); 
+            state.modals.dialog.resolve(state.modals.dialog.type === 'confirm' ? true : inputVal); state.modals.dialog.inputValue = ''; 
             state.modals.dialog.visible = false; 
             updateDOM();
         };
 
         // --- 12. PWA 机制初始化与自愈 (Self-Healing Cache & PWA) ---
-        const initLocalCache = () => {
-            try {
-                const storedItems = localStorage.getItem('school_comp_items_v2');
-                if (storedItems) state.competitionItems = JSON.parse(storedItems);
-                
-                const storedStudents = localStorage.getItem('school_comp_students_v2');
-                if (storedStudents) { 
-                    state.studentDB = JSON.parse(storedStudents); 
-                    state.classList = Object.keys(state.studentDB).sort(); 
-                }
-                
-                const storedResults = localStorage.getItem('school_comp_results_v2');
-                if (storedResults) state.dbResults = JSON.parse(storedResults);
-                
-                if (state.competitionItems.length > 0) state.isInitializing = false;
-            } catch(e) {
-                console.error("读取本地缓存出错:", e);
-            }
-        };
-
-        const initItemsFromStorage = () => {
-            const stored = localStorage.getItem('school_comp_items_v2');
-            if (stored) {
-                try { return JSON.parse(stored); } catch(e) {}
-            }
-            return [];
-        };
-
         const initPWA = () => {
             if (typeof window === 'undefined') return;
             const manifest = {
@@ -1935,27 +1334,6 @@
             link.rel = 'manifest';
             link.href = `data:application/manifest+json;charset=utf-8,${encodeURIComponent(JSON.stringify(manifest))}`;
             document.head.appendChild(link);
-        };
-
-        const normalizeData = (rawData) => {
-            if (!Array.isArray(rawData)) return [];
-            return rawData.map(item => {
-                const newItem = {};
-                Object.keys(item).forEach(key => {
-                    const k = key.toLowerCase().replace(/\s+/g, '');
-                    if (['studentname', 'name', '姓名'].some(x => k.includes(x))) newItem.studentName = item[key];
-                    else if (['studentclass', 'class', '班级'].some(x => k.includes(x))) newItem.studentClass = item[key];
-                    else if (['category', 'competition'].some(x => k.includes(x))) newItem.category = item[key];
-                    else if (['score', '分数'].some(x => k.includes(x))) newItem.score = item[key];
-                    else if (['rank', '排名', '名次'].some(x => k.includes(x))) newItem.rank = item[key];
-                    else if (['note', '备注', '题目'].some(x => k.includes(x))) newItem.note = item[key];
-                    else newItem[key] = item[key];
-                });
-                if(!newItem.studentName) newItem.studentName = newItem.Name || '';
-                if(!newItem.studentClass) newItem.studentClass = newItem.Class || '';
-                if(!newItem.category) newItem.category = newItem.Category || '';
-                return newItem;
-            });
         };
 
         // --- 13. DOM 动态流式渲染引擎 (State-Driven Custom Rendering Engine) ---
@@ -1997,8 +1375,8 @@
                                 </button>
                             ` : ''}
                             
-                            <button onclick="app.enterAdmin()" class="${state.currentTab === 'admin' || state.isAdmin ? 'bg-slate-800 text-indigo-300 shadow-md border-transparent' : 'border-indigo-400 hover:bg-indigo-700 text-indigo-100'} px-4 py-2 rounded-xl transition duration-200 flex items-center border hidden sm:flex">
-                                <i class="fas ${state.isAdmin ? 'fa-user-shield' : 'fa-cogs'}"></i> <span class="ml-1.5">${state.isAdmin ? '管理员' : '管理'}</span>
+                            <button onclick="app.enterAdmin()" class="${state.currentTab === 'admin' || state.isAdmin ? 'bg-slate-800 text-indigo-300 shadow-md border-transparent' : 'border-indigo-400 hover:bg-indigo-700 text-indigo-100'} px-4 py-2 rounded-xl transition duration-200 flex items-center border">
+                                <i class="fas ${state.isAdmin ? 'fa-user-shield' : 'fa-cogs'}"></i> <span class="ml-1.5">${state.adminPwd ? (state.isAdmin ? '管理员' : '教师') : '登录'}</span>
                             </button>
                         </div>
                     </div>
@@ -2006,6 +1384,7 @@
 
                 <!-- 容器框架 -->
                 <main class="flex-grow container mx-auto px-4 py-6 max-w-5xl">
+                    ${renderSyncNotice()}
                     ${renderActiveTab()}
                 </main>
 
@@ -2069,7 +1448,7 @@
 
                             <div class="relative flex-grow min-w-[150px]">
                                 <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                                <input type="text" id="lobby-search" oninput="state.searchQuery = this.value; app.refreshData(true);" value="${state.searchQuery}" placeholder="${t('search_placeholder')}" 
+                                <input type="text" id="lobby-search" oninput="state.searchQuery = this.value; app.render();" value="${escapeHTML(state.searchQuery)}" placeholder="${t('search_placeholder')}" 
                                     class="w-full border border-indigo-200 rounded-full pl-11 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition bg-white shadow-sm">
                             </div>
                             
@@ -2136,11 +1515,11 @@
                             <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 shadow-inner group-hover:scale-110 transition-transform duration-300 ${group.effectiveStatus !== 'open' ? 'bg-slate-200 text-slate-500' : 'bg-indigo-50 text-indigo-600'}">
                                 <i class="${getCategoryIcon(group.categoryName)}"></i>
                             </div>
-                            <h3 class="text-lg font-bold mb-1 font-kai ${group.effectiveStatus !== 'open' ? 'text-slate-600' : 'text-slate-800'}">${group.categoryName}</h3>
+                            <h3 class="text-lg font-bold mb-1 font-kai ${group.effectiveStatus !== 'open' ? 'text-slate-600' : 'text-slate-800'}">${escapeHTML(group.categoryName)}</h3>
                             
                             ${(group.startDate || group.endDate) ? `
                                 <div class="text-xs text-slate-400 mb-4 font-medium">
-                                    <i class="far fa-calendar-alt mr-1"></i>${formatDate(group.startDate)} ${group.endDate ? '- ' + formatDate(group.endDate) : ''}
+                                    <i class="far fa-calendar-alt mr-1"></i>${escapeHTML(formatDate(group.startDate))} ${escapeHTML(group.endDate ? '- ' + formatDate(group.endDate) : '')}
                                 </div>
                             ` : ''}
                             
@@ -2182,7 +1561,7 @@
             awards.forEach(a => {
                 const pureName = a.studentName.replace(/\s*\[.*?\]$/, '').trim();
                 const cleanName = formatName(pureName);
-                const key = `${a.studentClass}-${cleanName}`;
+                const key = a.studentId || JSON.stringify([a.studentClass, pureName]);
                 if (!studentMap[key]) {
                     studentMap[key] = { name: cleanName, class: a.studentClass, awards: [], totalWeight: 0 };
                 }
@@ -2217,15 +1596,15 @@
                                         <i class="fas fa-user-graduate"></i>
                                     </div>
                                     <div class="truncate">
-                                        <h3 class="text-lg font-bold text-slate-800 truncate">${stu.name}</h3>
-                                        <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md mt-0.5 inline-block">${stu.class}</span>
+                                        <h3 class="text-lg font-bold text-slate-800 truncate">${escapeHTML(stu.name)}</h3>
+                                        <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md mt-0.5 inline-block">${escapeHTML(stu.class)}</span>
                                     </div>
                                 </div>
                                 <div class="flex-grow flex flex-wrap gap-2 px-0 md:px-6">
                                     ${stu.awards.sort((a, b) => getRankWeight(b.rank) - getRankWeight(a.rank)).map(a => `
                                         <span class="inline-flex items-center border px-2 py-1 rounded-md text-xs shadow-sm bg-slate-50 border-slate-200 text-slate-700 max-w-[220px]">
-                                            <span class="font-bold mr-1.5 ${getRankClass(a.rank).split(' ')[1]} whitespace-nowrap">${smartRank(a.rank, a.category)}</span> 
-                                            <span class="truncate">${a.category}</span>
+                                            <span class="font-bold mr-1.5 ${getRankClass(a.rank).split(' ')[1]} whitespace-nowrap">${escapeHTML(smartRank(a.rank, a.category))}</span> 
+                                            <span class="truncate">${escapeHTML(a.category)}</span>
                                         </span>
                                     `).join('')}
                                 </div>
@@ -2257,8 +1636,8 @@
                                             <i class="fas fa-user-graduate"></i>
                                         </div>
                                         <div class="truncate">
-                                            <h3 class="text-lg font-bold text-slate-800 truncate">${stu.name}</h3>
-                                            <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md mt-0.5 inline-block">${stu.class}</span>
+                                            <h3 class="text-lg font-bold text-slate-800 truncate">${escapeHTML(stu.name)}</h3>
+                                            <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md mt-0.5 inline-block">${escapeHTML(stu.class)}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -2268,8 +1647,8 @@
                                             <li class="flex items-start bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                                                 <div class="mt-0.5 text-amber-500 mr-2.5"><i class="fas fa-award"></i></div>
                                                 <div class="flex-grow min-w-0">
-                                                    <div class="text-xs text-slate-500 mb-1 truncate font-medium">${award.category}</div>
-                                                    <div><span class="inline-block ${getRankClass(award.rank)} border px-2 py-0.5 rounded-md text-[10px] font-black tracking-wide shadow-sm">${smartRank(award.rank, award.category)}</span></div>
+                                                    <div class="text-xs text-slate-500 mb-1 truncate font-medium">${escapeHTML(award.category)}</div>
+                                                    <div><span class="inline-block ${getRankClass(award.rank)} border px-2 py-0.5 rounded-md text-[10px] font-black tracking-wide shadow-sm">${escapeHTML(smartRank(award.rank, award.category))}</span></div>
                                                 </div>
                                             </li>
                                         `).join('')}
@@ -2303,7 +1682,7 @@
                         <div class="flex flex-col md:flex-row gap-3 w-full">
                             <div class="relative flex-grow">
                                 <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                                <input type="text" oninput="state.studentSearchQuery = this.value; app.refreshData(true);" value="${state.studentSearchQuery || ''}" placeholder="${t('ph_search_student_records')}" 
+                                <input type="text" id="student-search" oninput="state.studentSearchQuery = this.value; app.render();" value="${escapeHTML(state.studentSearchQuery || '')}" placeholder="${t('ph_search_student_records')}" 
                                     class="w-full border border-slate-300 rounded-xl pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition bg-white shadow-sm font-bold text-slate-700">
                             </div>
                             
@@ -2352,10 +1731,10 @@
                                     <i class="fas fa-arrow-left sm:mr-2"></i> <span class="hidden sm:inline">${t('btn_back')}</span>
                                 </button>
                                 <div>
-                                    <h2 class="text-lg font-bold text-slate-800 font-kai leading-tight">${state.selectedCategory}</h2>
+                                    <h2 class="text-lg font-bold text-slate-800 font-kai leading-tight">${escapeHTML(state.selectedCategory)}</h2>
                                     <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
                                         <span class="text-xs text-slate-500 bg-slate-200/60 px-2.5 py-0.5 rounded-md inline-block">
-                                            <i class="fas fa-building mr-1"></i> ${getSelectedGroupOrganizer() || 'SJK (C) Ladang Grisek'}
+                                            <i class="fas fa-building mr-1"></i> ${escapeHTML(getSelectedGroupOrganizer() || 'SJK (C) Ladang Grisek')}
                                         </span>
                                         ${state.isBatchEditing ? `<span class="text-xs text-rose-500 font-bold animate-pulse inline-block">● ${t('mode_entry')}</span>` : ''}
                                     </div>
@@ -2490,13 +1869,13 @@
                             ${state.auditLog.map(log => `
                                 <li class="bg-white rounded-xl p-3 flex justify-between items-center shadow-sm border border-slate-100 hover:border-indigo-200 transition">
                                     <div class="flex flex-col truncate pr-3">
-                                        <span class="font-bold text-slate-800 text-sm truncate">${formatName(log.studentName) || log.category || formatName(log.name)}</span>
-                                        <span class="text-[10px] text-slate-500 font-mono mt-0.5"><i class="far fa-clock mr-1"></i>${log.timestamp}</span>
+                                        <span class="font-bold text-slate-800 text-sm truncate">${escapeHTML(formatName(log.studentName) || log.category || formatName(log.name))}</span>
+                                        <span class="text-[10px] text-slate-500 font-mono mt-0.5"><i class="far fa-clock mr-1"></i>${escapeHTML(log.timestamp)}</span>
                                     </div>
                                     <div class="flex items-center flex-shrink-0">
-                                        ${log.action === 'SCORE' ? `<span class="font-black text-indigo-600 text-base mr-3 w-12 text-right">${log.score}<span class="text-[10px] text-indigo-300 ml-0.5">分</span></span>` : ''}
-                                        ${log.action === 'REG' ? `<span class="text-xs font-bold text-emerald-600 mr-3 bg-emerald-50 px-2 py-1 rounded">新报名</span>` : ''}
-                                        ${log.action === 'DEL' ? `<span class="text-xs font-bold text-rose-600 mr-3 bg-rose-50 px-2 py-1 rounded">已删除</span>` : ''}
+                                        ${log.action === 'updateScore' ? `<span class="font-black text-indigo-600 text-base mr-3 w-12 text-right">${escapeHTML(log.score)}<span class="text-[10px] text-indigo-300 ml-0.5">分</span></span>` : ''}
+                                        ${log.action === 'register' ? `<span class="text-xs font-bold text-emerald-600 mr-3 bg-emerald-50 px-2 py-1 rounded">新报名</span>` : ''}
+                                        ${log.action === 'deleteRegistration' ? `<span class="text-xs font-bold text-rose-600 mr-3 bg-rose-50 px-2 py-1 rounded">已删除</span>` : ''}
                                         
                                         ${log.syncStatus === 'synced' ? `
                                             <span class="bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] px-2 py-1 rounded flex items-center shadow-sm font-bold">
@@ -2529,15 +1908,15 @@
                 const studentsList = cls.students.map(stu => `
                     <li class="flex justify-between items-center text-sm p-2 rounded-lg hover:bg-slate-50 transition group border border-transparent hover:border-slate-100">
                         <div class="flex flex-col flex-grow pr-2 min-w-0">
-                            <span class="font-medium text-slate-800 break-words">${formatName(stu.studentName)}</span>
-                            ${stu.note ? `<span class="text-[11px] text-slate-500 mt-0.5 truncate" title="${stu.note.replace(/"/g, '&quot;')}"><i class="fas fa-quote-left text-indigo-300 mr-1"></i>${stu.note}</span>` : ''}
+                            <span class="font-medium text-slate-800 break-words">${escapeHTML(formatName(stu.studentName))}</span>
+                            ${stu.note ? `<span class="text-[11px] text-slate-500 mt-0.5 truncate" title="${escapeHTML(stu.note)}"><i class="fas fa-quote-left text-indigo-300 mr-1"></i>${escapeHTML(stu.note)}</span>` : ''}
                         </div>
                         <div class="flex items-center gap-2 flex-shrink-0">
-                            ${stu.rank ? `<span class="${getRankClass(stu.rank)} text-xs px-2.5 py-0.5 rounded-md font-bold shadow-sm whitespace-nowrap">${t_rank(stu.rank)}</span>` : ''}
-                            ${(!stu.rank && stu.score) ? `<span class="text-slate-600 font-mono text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold">${stu.score}分</span>` : ''}
+                            ${stu.rank ? `<span class="${getRankClass(stu.rank)} text-xs px-2.5 py-0.5 rounded-md font-bold shadow-sm whitespace-nowrap">${escapeHTML(t_rank(stu.rank))}</span>` : ''}
+                            ${(!stu.rank && stu.score) ? `<span class="text-slate-600 font-mono text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold">${escapeHTML(stu.score)}分</span>` : ''}
                             
                             <button onclick="app.deleteRegistration(decodeURIComponent('${escapeStr(stu.studentName)}'), decodeURIComponent('${escapeStr(cls.className)}'))" class="text-slate-400 hover:text-rose-500 p-1.5 transition sm:opacity-0 group-hover:opacity-100 no-print" title="删除"><i class="fas fa-trash-alt"></i></button>
-                            <button onclick="app.openScoreModal(decodeURIComponent('${escapeStr(stu.studentName)}'), decodeURIComponent('${escapeStr(cls.className)}'), '${stu.score || ''}', '${stu.rank || ''}', decodeURIComponent('${escapeStr(stu.note || '')}'))" class="text-slate-400 hover:text-indigo-600 p-1.5 transition sm:opacity-0 group-hover:opacity-100 no-print" title="打分"><i class="fas fa-pencil-alt"></i></button>
+                            <button onclick="app.openScoreModal(decodeURIComponent('${escapeStr(stu.studentName)}'), decodeURIComponent('${escapeStr(cls.className)}'))" class="text-slate-400 hover:text-indigo-600 p-1.5 transition sm:opacity-0 group-hover:opacity-100 no-print" title="打分"><i class="fas fa-pencil-alt"></i></button>
                         </div>
                     </li>
                 `).join('');
@@ -2545,7 +1924,7 @@
                 return `
                     <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm relative overflow-hidden break-inside-avoid">
                         <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
-                            <span class="font-bold text-indigo-700 text-lg">${cls.className}</span>
+                            <span class="font-bold text-indigo-700 text-lg">${escapeHTML(cls.className)}</span>
                             <span class="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-0.5 rounded-full font-bold">${cls.students.length}${t('unit_person')}</span>
                         </div>
                         <ul class="space-y-1.5">
@@ -2572,16 +1951,16 @@
 
                     tableRows += `
                         <tr class="bg-white hover:bg-indigo-50 transition border-b border-slate-50 last:border-0 group">
-                            <td class="p-3.5 font-mono text-slate-500 text-sm font-bold sticky-col-left shadow-[2px_0_4px_-1px_rgba(0,0,0,0.05)] bg-white w-20">${cls.className}</td>
+                            <td class="p-3.5 font-mono text-slate-500 text-sm font-bold sticky-col-left shadow-[2px_0_4px_-1px_rgba(0,0,0,0.05)] bg-white w-20">${escapeHTML(cls.className)}</td>
                             <td class="p-3.5 font-medium text-slate-800 text-sm sticky-col-left shadow-[2px_0_4px_-1px_rgba(0,0,0,0.05)] bg-white left-[76px] w-48">
-                                <div class="line-clamp-2">${formatName(stu.studentName)}</div>
-                                ${stu.note ? `<div class="text-[10px] text-indigo-500 mt-1 truncate font-normal" title="${stu.note.replace(/"/g, '&quot;')}">${state.lang === 'zh' ? '题目' : 'Tajuk'}: ${stu.note}</div>` : ''}
+                                <div class="line-clamp-2">${escapeHTML(formatName(stu.studentName))}</div>
+                                ${stu.note ? `<div class="text-[10px] text-indigo-500 mt-1 truncate font-normal" title="${escapeHTML(stu.note)}">${state.lang === 'zh' ? '题目' : 'Tajuk'}: ${escapeHTML(stu.note)}</div>` : ''}
                             </td>
                             ${state.showScoreInput ? `
                                 <td class="p-2.5 w-32">
                                     <input type="number" step="0.1" inputmode="decimal" 
                                         id="batch-score-${stu.rowIndex}" 
-                                        value="${stu.score || ''}" 
+                                        value="${escapeHTML(stu.score ?? '')}" 
                                         oninput="app.syncTeamScore('${stu.rowIndex}')" 
                                         onkeyup="if(event.key==='Enter') app.focusNextBatchInput(event)" 
                                         class="batch-score-input w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono font-bold text-indigo-700 bg-white shadow-inner transition" 
@@ -2624,23 +2003,23 @@
 
         const renderRegisterTab = () => {
             const activeCompsOptions = getActiveCompetitions().map(i => `
-                <option value="${i.name}" ${state.form.category === i.name ? 'selected' : ''}>${i.name}</option>
+                <option value="${escapeHTML(i.name)}" ${state.form.category === i.name ? 'selected' : ''}>${escapeHTML(i.name)}</option>
             `).join('');
 
             const classGroupsHTML = state.form.groups.map((group, gIndex) => {
                 
                 const classOptions = state.classList.map(cls => `
-                    <option value="${cls}" ${group.class === cls ? 'selected' : ''}>${cls}</option>
+                    <option value="${escapeHTML(cls)}" ${group.class === cls ? 'selected' : ''}>${escapeHTML(cls)}</option>
                 `).join('');
 
                 const studentRows = group.students.map((currentStu, sIndex) => {
                     const studentDropdownOptions = group.class ? getStudentsByClass(group.class).map(dbStu => {
                         const isSelectedElsewhere = group.students.some((s, idx) => s === dbStu && idx !== sIndex);
                         return `
-                            <option value="${dbStu}" 
+                            <option value="${escapeHTML(dbStu)}" 
                                 ${currentStu === dbStu ? 'selected' : ''} 
                                 ${isSelectedElsewhere ? 'disabled class="bg-slate-100 text-slate-400"' : ''}>
-                                ${formatName(dbStu, true)} ${isSelectedElsewhere ? (state.lang === 'zh' ? ' (已选)' : ' (Selected)') : ''}
+                                ${escapeHTML(formatName(dbStu, true))} ${isSelectedElsewhere ? (state.lang === 'zh' ? ' (已选)' : ' (Selected)') : ''}
                             </option>
                         `;
                     }).join('') : '';
@@ -2665,7 +2044,7 @@
                             </div>
                             ${showNote ? `
                                 <div class="pl-8 pr-10">
-                                    <input type="text" oninput="app.updateStudentNote(${gIndex}, ${sIndex}, this.value)" value="${group.notes && group.notes[sIndex] ? group.notes[sIndex] : ''}" placeholder="请输入比赛题目/备注 (选填)" class="w-full border-b border-dashed border-indigo-200 outline-none focus:border-indigo-500 bg-transparent text-sm text-indigo-700 placeholder-indigo-300 py-1 transition">
+                                    <input type="text" oninput="app.updateStudentNote(${gIndex}, ${sIndex}, this.value)" value="${escapeHTML(group.notes && group.notes[sIndex] ? group.notes[sIndex] : '')}" placeholder="请输入比赛题目/备注 (选填)" class="w-full border-b border-dashed border-indigo-200 outline-none focus:border-indigo-500 bg-transparent text-sm text-indigo-700 placeholder-indigo-300 py-1 transition">
                                 </div>
                             ` : ''}
                         </div>
@@ -2685,7 +2064,7 @@
                                 <label class="block text-sm font-bold text-indigo-900 mb-2.5">${t('label_team_name')}</label>
                                 <div class="relative">
                                     <i class="fas fa-users absolute left-4 top-1/2 transform -translate-y-1/2 text-indigo-400"></i>
-                                    <input type="text" id="team-name-${gIndex}" oninput="state.form.groups[${gIndex}].teamName = this.value" value="${group.teamName || ''}" placeholder="${t('ph_team_name')}" required class="w-full rounded-xl border-2 border-indigo-200 pl-10 p-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 bg-white font-bold text-indigo-900 transition shadow-inner">
+                                    <input type="text" id="team-name-${gIndex}" oninput="state.form.groups[${gIndex}].teamName = this.value" value="${escapeHTML(group.teamName || '')}" placeholder="${t('ph_team_name')}" required class="w-full rounded-xl border-2 border-indigo-200 pl-10 p-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 bg-white font-bold text-indigo-900 transition shadow-inner">
                                 </div>
                             </div>
                         ` : ''}
@@ -2791,10 +2170,10 @@
                                 <i class="${getCategoryIcon(item.name)} text-indigo-500 text-lg"></i>
                             </div>
                             <div class="flex flex-col flex-grow">
-                                <span class="font-bold text-slate-800 font-kai text-lg leading-tight ${item.status === 'closed' ? 'line-through text-slate-400' : ''}">${item.name}</span>
+                                <span class="font-bold text-slate-800 font-kai text-lg leading-tight ${item.status === 'closed' ? 'line-through text-slate-400' : ''}">${escapeHTML(item.name)}</span>
                                 <div class="flex flex-wrap gap-2 text-xs text-slate-400 mt-1 font-medium">
-                                     ${item.organizer ? `<span class="bg-slate-100 px-1.5 rounded"><i class="fas fa-building mr-1"></i>${item.organizer}</span>` : ''}
-                                     ${item.startDate ? `<span class="bg-slate-100 px-1.5 rounded"><i class="far fa-calendar-alt mr-1"></i>${formatDate(item.startDate)} ${item.endDate ? '- ' + formatDate(item.endDate) : ''}</span>` : ''}
+                                     ${item.organizer ? `<span class="bg-slate-100 px-1.5 rounded"><i class="fas fa-building mr-1"></i>${escapeHTML(item.organizer)}</span>` : ''}
+                                     ${item.startDate ? `<span class="bg-slate-100 px-1.5 rounded"><i class="far fa-calendar-alt mr-1"></i>${escapeHTML(formatDate(item.startDate))} ${escapeHTML(item.endDate ? '- ' + formatDate(item.endDate) : '')}</span>` : ''}
                                 </div>
                             </div>
                         </div>
@@ -2816,12 +2195,12 @@
                         <div class="mb-8 bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <label class="block text-sm font-bold text-slate-700 mb-3">${t('label_add_item')}</label>
                             <form onsubmit="app.adminAddItem(event)" class="flex flex-col gap-3">
-                                <input type="text" id="new-item-name" oninput="state.adminForm.name=this.value" value="${state.adminForm.name}" placeholder="${t('ph_item_name')}" class="w-full border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 font-bold text-slate-800 transition">
+                                <input type="text" id="new-item-name" oninput="state.adminForm.name=this.value" value="${escapeHTML(state.adminForm.name)}" placeholder="${t('ph_item_name')}" class="w-full border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 font-bold text-slate-800 transition">
                                 <div class="flex flex-col sm:flex-row gap-3">
-                                    <input type="text" id="new-item-org" oninput="state.adminForm.organizer=this.value" value="${state.adminForm.organizer}" placeholder="${t('ph_organizer')}" class="flex-grow border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm font-medium transition">
+                                    <input type="text" id="new-item-org" oninput="state.adminForm.organizer=this.value" value="${escapeHTML(state.adminForm.organizer)}" placeholder="${t('ph_organizer')}" class="flex-grow border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm font-medium transition">
                                     <div class="flex gap-2 w-full">
-                                        <input type="date" id="new-item-start" oninput="state.adminForm.startDate=this.value" value="${state.adminForm.startDate}" class="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm text-slate-600 flex-1 transition w-1/2">
-                                        <input type="date" id="new-item-end" oninput="state.adminForm.endDate=this.value" value="${state.adminForm.endDate}" class="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm text-slate-600 flex-1 transition w-1/2">
+                                        <input type="date" id="new-item-start" oninput="state.adminForm.startDate=this.value" value="${escapeHTML(state.adminForm.startDate)}" class="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm text-slate-600 flex-1 transition w-1/2">
+                                        <input type="date" id="new-item-end" oninput="state.adminForm.endDate=this.value" value="${escapeHTML(state.adminForm.endDate)}" class="border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm text-slate-600 flex-1 transition w-1/2">
                                     </div>
                                 </div>
                                 <button type="submit" ${state.isSubmitting ? 'disabled' : ''} class="w-full sm:w-auto bg-indigo-600 text-white px-6 py-3 sm:py-2.5 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap shadow-md active:scale-95 transition mt-2 sm:mt-0">
@@ -2864,18 +2243,18 @@
                         </div>
                         <div class="p-6 space-y-5 overflow-y-auto shrink-0">
                             <div class="bg-indigo-50 p-4 rounded-xl text-base text-indigo-900 border border-indigo-100 flex items-center justify-between shadow-sm">
-                                <span class="font-bold font-mono bg-white px-2 py-1 rounded shadow-sm">${m.className}</span>
-                                <span class="font-bold text-lg text-right break-words max-w-[65%]">${formatName(m.studentName)}</span>
+                                <span class="font-bold font-mono bg-white px-2 py-1 rounded shadow-sm">${escapeHTML(m.className)}</span>
+                                <span class="font-bold text-lg text-right break-words max-w-[65%]">${escapeHTML(formatName(m.studentName))}</span>
                             </div>
                             
                             <div>
                                 <label class="block text-sm font-bold text-slate-700 mb-1.5">${t('th_note')} / 题目</label>
-                                <input type="text" id="indiv-note" value="${m.note}" oninput="state.modals.score.note = this.value" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-bold text-slate-700 transition" placeholder="输入题目或备注 (选填)">
+                                <input type="text" id="indiv-note" value="${escapeHTML(m.note)}" oninput="state.modals.score.note = this.value" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-bold text-slate-700 transition" placeholder="输入题目或备注 (选填)">
                             </div>
 
                             <div>
                                 <label class="block text-sm font-bold text-slate-700 mb-1.5">${t('th_score')}</label>
-                                <input type="number" step="0.1" inputmode="decimal" id="indiv-score" value="${m.score}" oninput="state.modals.score.score = this.value" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-lg font-bold text-indigo-700 transition" placeholder="-">
+                                <input type="number" step="0.1" inputmode="decimal" id="indiv-score" value="${escapeHTML(m.score)}" oninput="state.modals.score.score = this.value" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-lg font-bold text-indigo-700 transition" placeholder="-">
                             </div>
 
                             <div>
@@ -2911,15 +2290,15 @@
                         <div class="p-6 space-y-5 overflow-y-auto shrink-0">
                             <div>
                                 <label class="block text-sm font-bold text-slate-700 mb-1.5">${t('ph_item_name')} <span class="text-rose-500">*</span></label>
-                                <input type="text" oninput="state.modals.editCategory.newName = this.value" value="${m.newName}" class="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 font-bold text-lg transition">
+                                <input type="text" oninput="state.modals.editCategory.newName = this.value" value="${escapeHTML(m.newName)}" class="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 font-bold text-lg transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_organizer')}</label>
-                                <input type="text" oninput="state.modals.editCategory.organizer = this.value" value="${m.organizer}" class="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 font-medium transition">
+                                <input type="text" oninput="state.modals.editCategory.organizer = this.value" value="${escapeHTML(m.organizer)}" class="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 font-medium transition">
                             </div>
                             <div class="flex gap-4 w-full">
-                                <div class="flex-1 w-1/2"><label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_start_date')}</label><input type="date" oninput="state.modals.editCategory.startDate = this.value" value="${m.startDate}" class="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-medium transition"></div>
-                                <div class="flex-1 w-1/2"><label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_end_date')}</label><input type="date" oninput="state.modals.editCategory.endDate = this.value" value="${m.endDate}" class="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-medium transition"></div>
+                                <div class="flex-1 w-1/2"><label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_start_date')}</label><input type="date" oninput="state.modals.editCategory.startDate = this.value" value="${escapeHTML(m.startDate)}" class="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-medium transition"></div>
+                                <div class="flex-1 w-1/2"><label class="block text-sm font-bold text-slate-700 mb-1.5">${t('label_end_date')}</label><input type="date" oninput="state.modals.editCategory.endDate = this.value" value="${escapeHTML(m.endDate)}" class="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm font-medium transition"></div>
                             </div>
                             <div class="bg-indigo-50 p-4 rounded-xl text-xs sm:text-sm text-indigo-800 border border-indigo-100 leading-relaxed font-medium shadow-sm"><i class="fas fa-info-circle mr-1.5 text-indigo-600"></i> ${t('hint_edit_sync')}</div>
                         </div>
@@ -2960,7 +2339,7 @@
                     <div class="mb-5">
                         <div class="flex items-center mb-3">
                             <div class="h-[2px] bg-white/40 flex-grow rounded-l-full"></div>
-                            <span class="mx-3 text-white font-bold text-lg drop-shadow-md tracking-wider">${group.translatedLabel}</span>
+                            <span class="mx-3 text-white font-bold text-lg drop-shadow-md tracking-wider">${escapeHTML(group.translatedLabel)}</span>
                             <div class="h-[2px] bg-white/40 flex-grow rounded-r-full"></div>
                         </div>
                         <div class="grid grid-cols-1 gap-2.5">
@@ -2969,12 +2348,12 @@
                                     <div class="flex items-center flex-grow min-w-0 pr-3">
                                         <div class="text-2xl mr-2.5 drop-shadow-sm">${getRankEmoji(stu.rank)}</div>
                                         <div class="min-w-0">
-                                            <div class="text-slate-800 font-bold text-base leading-tight truncate">${formatName(stu.studentName)}</div>
-                                            <div class="text-slate-500 text-[11px] mt-0.5 font-medium tracking-wide">${stu.className}</div>
+                                            <div class="text-slate-800 font-bold text-base leading-tight truncate">${escapeHTML(formatName(stu.studentName))}</div>
+                                            <div class="text-slate-500 text-[11px] mt-0.5 font-medium tracking-wide">${escapeHTML(stu.className)}</div>
                                         </div>
                                     </div>
                                     <div class="text-right flex-shrink-0">
-                                        <span class="inline-block ${getRankGradient(stu.rank)} border px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide shadow-sm whitespace-nowrap">${smartRank(stu.rank, state.selectedCategory)}</span>
+                                        <span class="inline-block ${getRankGradient(stu.rank)} border px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide shadow-sm whitespace-nowrap">${escapeHTML(smartRank(stu.rank, state.selectedCategory))}</span>
                                     </div>
                                 </div>
                             `).join('')}
@@ -3011,7 +2390,7 @@
                                 
                                 <div class="text-center mb-8 relative z-10">
                                     <div class="text-white/80 text-lg mb-1.5 tracking-[0.25em] font-bold uppercase drop-shadow">${t('school_name_line2')}</div>
-                                    <h1 class="text-5xl font-black text-white mb-4 tracking-widest drop-shadow-lg" style="text-shadow: 0 4px 10px rgba(0,0,0,0.3);">${state.selectedCategory}</h1>
+                                    <h1 class="text-5xl font-black text-white mb-4 tracking-widest drop-shadow-lg" style="text-shadow: 0 4px 10px rgba(0,0,0,0.3);">${escapeHTML(state.selectedCategory)}</h1>
                                     <div class="inline-block bg-white/10 backdrop-blur-md border border-white/40 text-white px-8 py-2 rounded-full font-bold text-xl shadow-lg mt-1 tracking-wider">
                                         ${t('poster_subtitle')}
                                     </div>
@@ -3057,17 +2436,17 @@
                 <div class="fixed inset-0 z-[160] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm no-print p-0 sm:p-4">
                     <div class="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all mt-auto sm:mt-0 mb-0 sm:mb-auto flex flex-col max-h-[90vh]">
                         <div class="bg-indigo-600 px-6 py-5 flex justify-between items-center text-white shrink-0">
-                            <h3 class="font-bold text-lg tracking-wide"><i class="${m.icon}"></i> ${m.title}</h3>
+                            <h3 class="font-bold text-lg tracking-wide"><i class="${m.icon}"></i> ${escapeHTML(m.title)}</h3>
                             <button onclick="app.handleModalCancel()" class="p-1 -mr-2 text-indigo-200 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                         </div>
                         <div class="p-6 overflow-y-auto shrink-0">
-                            <p class="text-slate-700 mb-5 whitespace-pre-line font-medium leading-relaxed">${m.message}</p>
-                            ${isInputType ? `<input type="${m.type === 'password' ? 'password' : 'text'}" id="modal-input" oninput="state.modals.dialog.inputValue=this.value" value="${m.inputValue || ''}" onkeyup="if(event.key==='Enter') app.handleModalConfirm()" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-lg font-bold transition" placeholder="${m.placeholder}">` : ''}
+                            <p class="text-slate-700 mb-5 whitespace-pre-line font-medium leading-relaxed">${escapeHTML(m.message)}</p>
+                            ${isInputType ? `<input type="${m.type === 'password' ? 'password' : 'text'}" id="modal-input" oninput="state.modals.dialog.inputValue=this.value" value="${escapeHTML(m.inputValue || '')}" onkeyup="if(event.key==='Enter') app.handleModalConfirm()" class="w-full border-2 border-slate-200 rounded-xl px-4 py-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-lg font-bold transition" placeholder="${escapeHTML(m.placeholder)}">` : ''}
                         </div>
                         ${m.showButtons ? `
                             <div class="px-6 py-4 pb-safe bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
                                 ${m.type !== 'alert' ? `<button onclick="app.handleModalCancel()" class="px-5 py-3 sm:py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition flex-1 sm:flex-none">${t('btn_cancel')}</button>` : ''}
-                                <button onclick="app.handleModalConfirm()" class="px-6 py-3 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition flex items-center justify-center flex-1 sm:flex-none">${m.confirmText || t('btn_confirm')}</button>
+                                <button onclick="app.handleModalConfirm()" class="px-6 py-3 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold shadow-md active:scale-95 transition flex items-center justify-center flex-1 sm:flex-none">${escapeHTML(m.confirmText || t('btn_confirm'))}</button>
                             </div>
                         ` : ''}
                     </div>
@@ -3082,7 +2461,7 @@
             return `
                 <div class="fixed top-20 left-1/2 transform -translate-x-1/2 z-[200] px-6 py-3 rounded-full shadow-lg font-bold text-sm flex items-center transition-all duration-300 ${t.type === 'success' ? 'bg-emerald-500 text-white' : (t.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white')} w-[90%] sm:w-auto max-w-sm justify-center">
                     <i class="${t.type === 'success' ? 'fas fa-check-circle' : (t.type === 'warning' ? 'fas fa-exclamation-triangle' : 'fas fa-exclamation-circle')} mr-2 text-lg"></i>
-                    <span class="break-words">${t.message}</span>
+                    <span class="break-words">${escapeHTML(t.message)}</span>
                 </div>
             `;
         };
@@ -3094,11 +2473,14 @@
             fetchAllData();
             
             // 定时后台刷新 (每60秒)
-            autoRefreshTimer = setInterval(() => { fetchAllData(true); }, 60000); 
+            autoRefreshTimer = setInterval(() => { if (!document.hidden) { if (state.unsyncedQueue.length && state.adminPwd) syncQueueData(true); else fetchAllData(true); } }, 60000);
+            window.addEventListener("online", () => { if (state.unsyncedQueue.length && state.adminPwd) syncQueueData(true); else fetchAllData(true); });
+            window.addEventListener("storage", e => { if (e.key === outboxKey()) { state.unsyncedQueue = loadOutbox(); fetchAllData(true); } }); 
         };
 
         // 统一全局接口，使 HTML 内 onclick 绑定 safe 运行
         window.app = {
+            render: updateDOM, logout, exportPending, reviewBlocked,
             goToStudentRecords: () => { state.currentTab = 'student_records'; state.studentSearchQuery = ''; updateDOM(); },
             toggleStudentViewMode,
             changeStudentSort,
