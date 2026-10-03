@@ -3,7 +3,7 @@ const SCRIPT_VERSION = '7.0';
 const TABLES = {
   Competitions: ['id', 'year', 'name', 'organizer', 'status', 'startDate', 'endDate', 'version', 'deleted', 'lastOperationId'],
   Students: ['id', 'year', 'studentClass', 'studentName', 'version', 'deleted', 'lastOperationId'],
-  Results: ['id', 'year', 'studentId', 'competitionId', 'teamId', 'teamName', 'score', 'rank', 'note', 'version', 'deleted', 'lastOperationId'],
+  Results: ['id', 'year', 'studentId', 'competitionId', 'teamId', 'teamName', 'score', 'rank', 'note', 'version', 'deleted', 'lastOperationId', 'studentNameSnapshot', 'studentClassSnapshot', 'studentStatus'],
   Operations: ['id', 'request', 'table', 'recordId', 'before', 'after', 'status', 'actor', 'createdAt', 'completedAt']
 };
 const WRITES = ['register', 'updateScore', 'batchUpdateScores', 'deleteRegistration', 'addCompetition', 'editCompetition', 'deleteCompetition', 'toggleStatus'];
@@ -109,8 +109,8 @@ function handleRequest(p, method) {
       var student = students.find(function(s) { return s.id === r.studentId; });
       var comp = comps.find(function(c) { return c.id === r.competitionId; });
       return Object.assign({}, r, { score: value(r.score), rank: value(r.rank), note: value(r.note),
-        studentName: (student ? student.studentName : '') + (r.teamName ? ' [' + r.teamName + ']' : ''),
-        studentClass: student ? student.studentClass : '', category: comp.name });
+        studentName: (student ? student.studentName : value(r.studentNameSnapshot)) + (r.teamName ? ' [' + r.teamName + ']' : ''),
+        studentClass: student ? student.studentClass : value(r.studentClassSnapshot), category: comp.name });
     });
     var years = Array.from(new Set(table(ss, 'Competitions').filter(function(r) { return value(r.deleted) !== 'true'; }).map(function(r) { return value(r.year); }).concat([year]))).sort();
     if (action === 'getSnapshot') return jsonResponse({ status: 'success', data: { competitions: comps, students: students, results: visible, years: years, authenticated: !!role }, version: SCRIPT_VERSION });
@@ -256,16 +256,31 @@ function migrateLegacyDatabase() {
     students = students.map(function(s) { if(!s.studentName || !s.studentClass) fail('MIGRATION','Blank student name/class.'); return stamp(s); });
     unique(comps,function(c){return c.name;},'competition');
     unique(students,function(s){return JSON.stringify([s.studentClass,s.studentName]);},'student');
-    var teams = {};
+    // Explicit, school-approved resolutions only. Never infer identities by fuzzy matching.
+    var resolutions = JSON.parse(props().getProperty('MIGRATION_STUDENT_RESOLUTIONS') || '[]');
+    if (!Array.isArray(resolutions)) fail('MIGRATION', 'Invalid student resolutions.');
+    var teams = {}, formerStudents = {};
     results = results.map(function(r) {
       var match = r.studentName.match(/\s*\[([^\]]+)\]$/), team = match ? match[1] : '';
       var pure = match ? r.studentName.slice(0, match.index).trim() : r.studentName;
-      var student = students.find(function(s){return s.studentClass===r.studentClass && s.studentName===pure;});
+      var matches = resolutions.filter(function(x){return x.year===year && x.studentClass===r.studentClass && x.legacyName===pure;});
+      if(matches.length>1) fail('MIGRATION','Duplicate student resolution.');
+      var resolution = matches[0];
+      var resolvedName = resolution && resolution.status==='active' ? resolution.studentName : pure;
+      var student = students.find(function(s){return s.studentClass===r.studentClass && s.studentName===resolvedName;});
+      var former = resolution && resolution.status==='left';
+      if(former && student) fail('MIGRATION','Former student still appears in roster: '+pure);
+      if(former) {
+        var formerKey=JSON.stringify([r.studentClass,pure]);
+        if(!formerStudents[formerKey]) formerStudents[formerKey]={id:Utilities.getUuid(),studentName:pure,studentClass:r.studentClass};
+        student=formerStudents[formerKey];
+      }
       var comp = comps.find(function(c){return c.name===r.category;});
       if(!student || !comp) fail('MIGRATION','Unmatched legacy result: ' + r.studentClass + '/' + r.studentName + '/' + r.category);
       // Legacy teams had no IDs; preserve the legacy category+team-name grouping explicitly.
       var key = JSON.stringify([comp.id,team]); if(team && !teams[key]) teams[key]=Utilities.getUuid();
-      return stamp({studentId:student.id,competitionId:comp.id,teamId:team?teams[key]:'',teamName:team,score:r.score,rank:r.rank,note:r.note});
+      return stamp({studentId:student.id,competitionId:comp.id,teamId:team?teams[key]:'',teamName:team,score:r.score,rank:r.rank,note:r.note,
+        studentNameSnapshot:student.studentName,studentClassSnapshot:student.studentClass,studentStatus:former?'left':'active'});
     });
     unique(results,function(r){return JSON.stringify([r.studentId,r.competitionId]);},'registration');
     var backup = ss.copy(ss.getName() + ' backup before v7 ' + new Date().toISOString());

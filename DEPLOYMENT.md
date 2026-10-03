@@ -76,3 +76,7 @@
 - [Google：脚本属性](https://developers.google.com/apps-script/guides/properties)
 - [Google：脚本锁与释放前 flush](https://developers.google.com/apps-script/reference/lock/lock)
 - [Google：表格批量写入 setValues](https://developers.google.com/apps-script/reference/spreadsheet/range#setValues(Object))
+
+
+## Approved legacy identity resolutions
+Before the first successful migration, set MIGRATION_STUDENT_RESOLUTIONS to a JSON array of school-approved entries: year, studentClass, legacyName, status (active or left), and studentName for active aliases. Keep real identities in private script properties, never in GitHub. Unresolved entries still halt migration. Former students are represented only by result snapshots and stable historical IDs; they are not added to Students_v7 and cannot register again. Existing successful v7 migrations require a separate schema upgrade and must not be rerun against this expanded schema.

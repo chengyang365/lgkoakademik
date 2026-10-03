@@ -104,6 +104,27 @@ test('migration requires an explicit year and preserves original sheets',()=>{
  const id=f.rows('Competitions')[0].id;f.ctx.migrateLegacyDatabase();assert.equal(f.rows('Competitions')[0].id,id);
 });
 module.exports={fixture};
+test('approved former students retain results without entering the active roster',()=>{
+ const f=fixture();delete f.properties.SCHEMA_VERSION;f.properties.LEGACY_YEAR='2026';
+ f.ss.insertSheet('Competitions').rows=[['name'],['Speech'],['Song']];
+ f.ss.insertSheet('Students').rows=[['class','name'],['1A','Alice Correct']];
+ const legacy=f.ss.insertSheet('Results');legacy.rows=[['studentName','studentClass','category','score','rank','note'],
+ ['Alice Old','1A','Speech',0,'','note'],['Former [Team]','2B','Speech',80,'','history'],['Former','2B','Song',90,'','']];
+ const original=JSON.stringify(legacy.rows);
+ assert.throws(()=>f.ctx.migrateLegacyDatabase(),/Unmatched/);
+ f.properties.MIGRATION_STUDENT_RESOLUTIONS=JSON.stringify([
+ {year:'2026',studentClass:'1A',legacyName:'Alice Old',status:'active',studentName:'Alice Correct'},
+ {year:'2026',studentClass:'2B',legacyName:'Former',status:'left'}]);
+ f.ctx.migrateLegacyDatabase();
+ assert.equal(JSON.stringify(legacy.rows),original);
+ const snapshot=f.call(f.request('getSnapshot')).data;
+ assert.equal(snapshot.students.length,1);assert.equal(snapshot.results.length,3);
+ assert.equal(snapshot.results[0].studentName,'Alice Correct');assert.equal(snapshot.results[0].score,'0');
+ assert.equal(snapshot.results[1].studentName,'Former [Team]');assert.equal(snapshot.results[1].studentClass,'2B');
+ assert.equal(snapshot.results[1].studentStatus,'left');assert.equal(snapshot.results[1].studentId,snapshot.results[2].studentId);
+ assert.equal(f.call(f.request('register',{studentId:snapshot.results[1].studentId,competitionId:snapshot.competitions[0].id})).code,'VALIDATION');
+ assert.equal(f.call({action:'getSnapshot',year:'2026'}).data.results.length,0);
+});
 test('score batch returns durable partial receipts and stops at first conflict',()=>{
  const f=fixture(),first=f.score(),second=f.score({score:'80'});
  const p=f.request('batchUpdateScores',{operations:[first,second]});
