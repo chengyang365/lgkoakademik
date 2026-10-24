@@ -282,7 +282,21 @@ function migrateLegacyDatabase() {
       return stamp({studentId:student.id,competitionId:comp.id,teamId:team?teams[key]:'',teamName:team,score:r.score,rank:r.rank,note:r.note,
         studentNameSnapshot:student.studentName,studentClassSnapshot:student.studentClass,studentStatus:former?'left':'active'});
     });
-    unique(results,function(r){return JSON.stringify([r.studentId,r.competitionId]);},'registration');
+    // Collapse duplicate legacy registrations only when their populated score fields agree.
+    // Complementary blanks keep the populated value; conflicting values stop before any writes.
+    var consolidated = {}, resultOrder = [];
+    results.forEach(function(r) {
+      var key = JSON.stringify([r.studentId,r.competitionId]);
+      var prior = consolidated[key];
+      if (!prior) { consolidated[key] = r; resultOrder.push(key); return; }
+      if (prior.teamId !== r.teamId || prior.teamName !== r.teamName) fail('MIGRATION','Conflicting duplicate registration team data.');
+      ['score','rank','note'].forEach(function(field) {
+        var a = value(prior[field]).trim(), b = value(r[field]).trim();
+        if (a && b && a !== b) fail('MIGRATION','Conflicting duplicate registration ' + field + '.');
+        if (!a && b) prior[field] = r[field];
+      });
+    });
+    results = resultOrder.map(function(key) { return consolidated[key]; });
     var backup = ss.copy(ss.getName() + ' backup before v7 ' + new Date().toISOString());
     props().setProperty('MIGRATION_BACKUP_URL', backup.getUrl());
     // Original sheets remain untouched. Only incomplete v7 migration sheets may be rebuilt.
