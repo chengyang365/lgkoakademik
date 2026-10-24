@@ -49,6 +49,14 @@ function allowedAppsScriptUrl(value) {
   } catch (_) { return false; }
 }
 
+function allowedStudentApiUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === 'lgstudenthub.vercel.app'
+      && url.pathname === '/api/students' && !url.search && !url.hash;
+  } catch (_) { return false; }
+}
+
 async function readActiveStudents(apiUrl, apiKey) {
   const byId = new Map();
   let offset = 0, expectedTotal = null, expectedCursor = null, pages = 0;
@@ -109,7 +117,7 @@ module.exports = async function handler(req, res) {
   const appScriptUrl = process.env.APPS_SCRIPT_URL || '';
   const apiKey = process.env.STUDENT_API_KEY || '';
   const studentApiUrl = process.env.STUDENT_API_URL || DEFAULT_STUDENT_API_URL;
-  if (!allowedAppsScriptUrl(appScriptUrl) || !apiKey) {
+  if (!allowedAppsScriptUrl(appScriptUrl) || !allowedStudentApiUrl(studentApiUrl) || !apiKey) {
     return send(res, 503, { success: false, message: '服务端尚未配置 APPS_SCRIPT_URL 和 STUDENT_API_KEY。' });
   }
   try {
