@@ -113,6 +113,28 @@ const fetchAllData = async (background = false) => {
         if(seq===refreshSequence) {state.isInitializing=false;state.isRefreshing=false;updateDOM();}
     }
 };
+const syncStudentRosterFromHub = async () => {
+    if (state.role !== 'admin' || !state.adminPwd) { showToast('只有管理员可以同步学生名单。','error'); return; }
+    if (state.isRosterSyncing) return;
+    state.isRosterSyncing=true; updateDOM();
+    const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),60000);
+    try {
+        const response=await fetch('/api/sync-students', {
+            method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+            cache:'no-store', signal:controller.signal,
+            body:JSON.stringify({year:String(state.selectedYear),auth_pwd:state.adminPwd})
+        });
+        let result;
+        try { result=await response.json(); } catch (_) { throw new Error('名单同步服务返回了无效响应。'); }
+        if(!response.ok || result.success!==true || !result.data) throw new Error(result.message || '名单同步失败。');
+        await fetchAllData(false);
+        showToast('StudentHub 名单已同步：'+result.data.activeCount+' 名在册学生。','success');
+    } catch(e) {
+        showToast(e.name==='AbortError'?'名单同步超时，请稍后重试。':(e.message||'名单同步失败。'),'error');
+    } finally {
+        clearTimeout(timer); state.isRosterSyncing=false; updateDOM();
+    }
+};
 const initLocalCache = () => {
     const snapshot=safeJSON(cacheKey(state.selectedYear),null);
     if(snapshot && Array.isArray(snapshot.competitions)) { state.competitionItems=snapshot.competitions;state.availableYears=snapshot.years || []; }
