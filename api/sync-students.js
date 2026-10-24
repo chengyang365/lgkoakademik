@@ -1,7 +1,7 @@
 'use strict';
 
 const DEFAULT_STUDENT_API_URL = 'https://lgstudenthub.vercel.app/api/students';
-const MAX_STUDENTS = 5000;
+const MAX_STUDENTS = 2000;
 
 function send(res, status, body) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
