@@ -102,7 +102,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { success: false, message: '仅支持 POST。' });
   const body = parseBody(req.body);
   if (!body || typeof body.auth_pwd !== 'string' || !body.auth_pwd || typeof body.year !== 'string'
-    || !/^20\\d{2}$/.test(body.year)) {
+    || !/^20\d{2}$/.test(body.year)) {
     return send(res, 400, { success: false, message: '登录状态或年度无效。' });
   }
 
