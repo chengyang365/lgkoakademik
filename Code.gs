@@ -328,16 +328,24 @@ function syncStudentRoster(ss, p, year) {
       student.lastOperationId = 'studenthub-sync'; deactivated++;
     }
   });
+  function ensureCapacity(sheet, neededRows) {
+    if (typeof sheet.getMaxRows === 'function' && sheet.getMaxRows() < neededRows) {
+      sheet.insertRowsAfter(sheet.getMaxRows(), neededRows - sheet.getMaxRows());
+    }
+  }
   var studentSheet = ss.getSheetByName('Students_v7');
   var studentValues = [TABLES.Students].concat(ssStudents.map(function(s) { return TABLES.Students.map(function(k) { return cell(s[k]); }); }));
+  ensureCapacity(studentSheet, studentValues.length);
   studentSheet.getRange(1, 1, studentValues.length, TABLES.Students.length).setValues(studentValues);
   if (results.length) {
     var resultSheet = ss.getSheetByName('Results_v7');
     var resultValues = [TABLES.Results].concat(results.map(function(r) { return TABLES.Results.map(function(k) { return cell(r[k]); }); }));
+    ensureCapacity(resultSheet, resultValues.length);
     resultSheet.getRange(1, 1, resultValues.length, TABLES.Results.length).setValues(resultValues);
   }
   if (!mapSheet) mapSheet = ss.insertSheet('_StudentHubMap_v1');
   var mapValues = [mapHeaders].concat(mappings.map(function(m) { return [m.hubStudentId,m.year,m.studentId]; }));
+  ensureCapacity(mapSheet, mapValues.length);
   mapSheet.clearContents();
   mapSheet.getRange(1, 1, mapValues.length, mapHeaders.length).setValues(mapValues);
   SpreadsheetApp.flush();
