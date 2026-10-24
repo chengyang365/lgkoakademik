@@ -2192,6 +2192,17 @@
                         <button onclick="app.goHome()" class="p-2 -mr-2 text-slate-400 hover:text-white transition"><i class="fas fa-times text-lg"></i></button>
                     </div>
                     <div class="p-5 sm:p-8">
+                        <div class="mb-6 bg-emerald-50 p-4 sm:p-5 rounded-2xl border border-emerald-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div>
+                                    <h3 class="font-bold text-emerald-900"><i class="fas fa-users mr-2"></i>StudentHub 学生名单</h3>
+                                    <p class="text-sm text-emerald-800 mt-1">同步所选年度的在册学生。离校学生会从新报名名单移除，原有成绩记录继续保留。</p>
+                                </div>
+                                <button onclick="app.syncStudentRosterFromHub()" ${state.isRosterSyncing ? 'disabled' : ''} class="bg-emerald-700 text-white px-5 py-3 rounded-xl font-bold hover:bg-emerald-800 disabled:opacity-50 whitespace-nowrap">
+                                    ${state.isRosterSyncing ? '<i class="fas fa-spinner fa-spin mr-1"></i>同步中' : '<i class="fas fa-sync-alt mr-1"></i>同步学生名单'}
+                                </button>
+                            </div>
+                        </div>
                         <div class="mb-8 bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <label class="block text-sm font-bold text-slate-700 mb-3">${t('label_add_item')}</label>
                             <form onsubmit="app.adminAddItem(event)" class="flex flex-col gap-3">
@@ -2530,6 +2541,7 @@
             submitEditCategory,
             toggleStatus,
             adminAddItem,
+            syncStudentRosterFromHub,
             adminDeleteItem,
             printRoster,
             printScoringSheet,
