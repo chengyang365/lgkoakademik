@@ -38,6 +38,18 @@
 不要直接修改 v7 表的 ID、version、deleted、lastOperationId、操作日志或表头。
 手工修改数据会绕过版本和审计保护；应使用应用界面。
 
+## StudentHub 学生名单同步
+
+学生名单从 `https://lgstudenthub.vercel.app/api/students` 读取。管理员在后台点击“同步学生名单”后，Vercel 服务端先验证管理员，再通过 `Authorization: Bearer` 分页读取在册学生，并写入 Apps Script。API 密钥只存放在 Vercel 服务端环境变量 `STUDENT_API_KEY`，不会进入网页、浏览器请求参数或返回名单。
+
+部署前配置：
+
+- 在 StudentHub 建立专用 API 密钥，只授权 `id`、`name`、`className` 字段。
+- 在 Vercel 环境变量设置 `STUDENT_API_KEY` 和当前 Apps Script Web App 的 `APPS_SCRIPT_URL`（完整 `/macros/s/.../exec` 地址）。可选设置 `STUDENT_API_URL`；默认使用上述 StudentHub 地址。
+- 在 Apps Script 脚本属性设置 `ROSTER_YEAR`，例如 `2026`。同步只能更改此年度。
+
+每个 StudentHub 固定 ID 会映射到原本地学生 ID，成绩关联不会断开。首次同步只按“班级＋姓名”进行唯一精确匹配；若匹配不明确，会停止整个同步，需先核实数据。源名单缺席学生会在 `Students_v7` 软停用，不会删除其记录；同步时会为未保存快照的旧成绩补存姓名和班级，因此历史成绩仍可查看，但该生不能再报名。空名单和分页期间发生变化都会取消同步。
+
 ## 测试
 
 需要 Node.js 20 或更新版本，无需安装第三方包：
