@@ -319,7 +319,7 @@ function syncStudentRoster(ss, p, year) {
     if (!previous) return;
     if (!value(result.studentNameSnapshot)) result.studentNameSnapshot = value(previous.studentName);
     if (!value(result.studentClassSnapshot)) result.studentClassSnapshot = value(previous.studentClass);
-    if (!value(result.studentStatus)) result.studentStatus = included.has(value(previous.id)) ? 'active' : 'left';
+    result.studentStatus = included.has(value(previous.id)) ? 'active' : 'left';
   });
   var deactivated = 0;
   ssStudents.forEach(function(student) {
