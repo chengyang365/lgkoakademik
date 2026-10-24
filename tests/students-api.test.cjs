@@ -34,7 +34,7 @@ test('sync proxy requires POST and all secrets remain server-side',async()=>{
 test('only a verified admin may read the roster API',async()=>{
   const restore=setEnv({APPS_SCRIPT_URL:appScriptUrl,STUDENT_API_KEY:apiKey});
   const oldFetch=global.fetch;let calls=0;
-  global.fetch=async(url,options)=>{calls++;assert.match(String(url),/script\\.google\\.com/);return appResponse({status:'success',role:'teacher'});};
+  global.fetch=async(url,options)=>{calls++;assert.match(String(url),/script\.google\.com/);return appResponse({status:'success',role:'teacher'});};
   try{
     const res=mockRes();await handler({method:'POST',body:{year:'2026',auth_pwd:'teacher-secret'}},res);
     assert.equal(res.statusCode,403);assert.equal(calls,1);assert.equal(JSON.stringify(res.body).includes(apiKey),false);
