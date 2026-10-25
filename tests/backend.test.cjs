@@ -137,3 +137,44 @@ test('annual roster import is append-only and idempotent for matching students',
  f.ctx.importStudentRosterForYear();assert.equal(f.rows('Students').length,2);
  source.rows.push(['2A','Alice']);assert.throws(()=>f.ctx.importStudentRosterForYear(),/Duplicate/);assert.equal(f.rows('Students').length,2);
 });
+
+test('StudentHub sync preserves local IDs, soft-departs missing students, and keeps score history',()=>{
+ const f=fixture();f.properties.ROSTER_YEAR='2026';
+ const sync=students=>f.request('syncStudentRoster',{students});
+ const first=f.call(sync([{id:'hub-alice',name:'Alice',className:'1A'},{id:'hub-bob',name:'Bob',className:'2A'}]));
+ assert.equal(first.status,'success');assert.equal(first.data.createdCount,1);assert.equal(first.data.activeCount,2);
+ const map=f.sheets._StudentHubMap_v1.rows.slice(1);
+ const alice=map.find(r=>r[0]==='hub-alice');assert.equal(alice[2],'student-2026');
+ assert.equal(f.rows('Results')[0].studentNameSnapshot,'Alice');
+ const second=f.call(sync([{id:'hub-bob',name:'Bob',className:'2A'}]));
+ assert.equal(second.status,'success');assert.equal(second.data.deactivatedCount,1);
+ const students=f.rows('Students');assert.equal(students.find(s=>s.id==='student-2026').deleted,true);
+ const snapshot=f.call(f.request('getSnapshot'));
+ assert.equal(snapshot.data.students.some(s=>s.id==='student-2026'),false);
+ assert.equal(snapshot.data.results[0].studentName,'Alice');
+ assert.equal(snapshot.data.results[0].studentClass,'1A');
+ assert.equal(snapshot.data.results[0].studentStatus,'left');
+ assert.equal(f.call(f.request('register',{studentId:'student-2026',competitionId:'comp-2026'})).code,'VALIDATION');
+ const third=f.call(sync([{id:'hub-bob',name:'Bob',className:'2A'}]));
+ assert.equal(third.data.createdCount,0);assert.equal(third.data.activeCount,1);
+ assert.equal(f.sheets._StudentHubMap_v1.rows.length,3);
+});
+test('StudentHub sync is admin-only and refuses unsafe or ambiguous full rosters before writing',()=>{
+ const f=fixture();f.properties.ROSTER_YEAR='2026';
+ const students=[{id:'hub-alice',name:'Alice',className:'1A'}];
+ assert.equal(f.call(f.request('syncStudentRoster',{auth_pwd:f.properties.TEACHER_PWD,students})).code,'FORBIDDEN');
+ assert.equal(f.call(f.request('syncStudentRoster',{students:[]})).code,'VALIDATION');
+ const ambiguous=f.call(f.request('syncStudentRoster',{students:[
+  {id:'hub-alice-1',name:'Alice',className:'1A'},{id:'hub-alice-2',name:'Alice',className:'1A'}
+ ]}));
+ assert.equal(ambiguous.code,'VALIDATION');
+ assert.equal(f.rows('Students').length,1);assert.equal(f.rows('Results').length,1);
+ assert.equal(f.ss.getSheetByName('_StudentHubMap_v1'),null);
+});
+test('StudentHub sync requires the configured roster year',()=>{
+ const f=fixture();
+ assert.equal(f.call(f.request('syncStudentRoster',{students:[{id:'hub-alice',name:'Alice',className:'1A'}]})).code,'CONFIG');
+ f.properties.ROSTER_YEAR='2027';
+ assert.equal(f.call(f.request('syncStudentRoster',{students:[{id:'hub-alice',name:'Alice',className:'1A'}]})).code,'VALIDATION');
+ assert.equal(f.rows('Students').length,1);
+});
