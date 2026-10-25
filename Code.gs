@@ -52,7 +52,7 @@ function roleOf(p) {
   if (!secret || secret.length < 12) fail('CONFIG', 'Set a new ADMIN_PWD of at least 12 characters in Script Properties.');
   if (p.auth_pwd === secret) return 'admin';
   var teacher = props().getProperty('TEACHER_PWD');
-  if (teacher && teacher.length >= 12 && p.auth_pwd === teacher) return 'teacher';
+  if (teacher && Array.from(teacher).length === 4 && p.auth_pwd === teacher) return 'teacher';
   return '';
 }
 function jsonResponse(data) {
