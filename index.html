@@ -2196,11 +2196,8 @@
                             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                 <div>
                                     <h3 class="font-bold text-emerald-900"><i class="fas fa-users mr-2"></i>StudentHub 学生名单</h3>
-                                    <p class="text-sm text-emerald-800 mt-1">同步所选年度的在册学生。离校学生会从新报名名单移除，原有成绩记录继续保留。</p>
+                                    <p class="text-sm text-emerald-800 mt-1">当前年度在册名单会在教师或管理员登录后从 StudentHub 实时读取，无需手动同步。离校学生不进入新报名名单，已有成绩记录会保留。</p>
                                 </div>
-                                <button onclick="app.syncStudentRosterFromHub()" ${state.isRosterSyncing ? 'disabled' : ''} class="bg-emerald-700 text-white px-5 py-3 rounded-xl font-bold hover:bg-emerald-800 disabled:opacity-50 whitespace-nowrap">
-                                    ${state.isRosterSyncing ? '<i class="fas fa-spinner fa-spin mr-1"></i>同步中' : '<i class="fas fa-sync-alt mr-1"></i>同步学生名单'}
-                                </button>
                             </div>
                         </div>
                         <div class="mb-8 bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -2541,7 +2538,6 @@
             submitEditCategory,
             toggleStatus,
             adminAddItem,
-            syncStudentRosterFromHub,
             adminDeleteItem,
             printRoster,
             printScoringSheet,
