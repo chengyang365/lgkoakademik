@@ -1,7 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/sync-students.js": {
+    "api/students.js": {
+      "maxDuration": 60
+    },
+    "api/register-student.js": {
       "maxDuration": 60
     }
   }

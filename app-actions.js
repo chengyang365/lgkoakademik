@@ -25,12 +25,14 @@ const submitForm = async () => {
         const teamId=teamName ? operationId() : '';
         for(let i=0;i<group.students.length;i++) {
             const name=group.students[i];if(!name)continue;
-            const student=state.studentRows.find(s=>s.studentName===name && s.studentClass===group.class);
-            if(!student){showToast('学生不在当前年度名册，请刷新。','error');return;}
-            if(seen.has(student.id) || state.dbResults.some(r=>r.studentId===student.id && r.competitionId===comp.id))continue;
-            seen.add(student.id);
-            operations.push(makeOperation('register',{studentId:student.id,competitionId:comp.id,teamId,teamName,
-                name:name+(teamName?' ['+teamName+']':''),stuClass:group.class,category:comp.name,note:String(group.notes?.[i] || '').trim()}));
+            const matches=state.studentRows.filter(s=>s.studentName===name && s.studentClass===group.class);
+            if(matches.length!==1){showToast(matches.length ? '同班存在同名学生，已阻止错误报名。' : '学生不在当前年度名册，请刷新。','error');return;}
+            const student=matches[0], stableId=student.id;
+            if(seen.has(stableId) || state.dbResults.some(r=>(r.studentHubId===stableId || r.studentId===stableId) && r.competitionId===comp.id))continue;
+            seen.add(stableId);
+            const identity=student.source==='studenthub' ? {studentHubId:stableId} : {studentId:student.id};
+            operations.push(makeOperation('register',{...identity,competitionId:comp.id,teamId,teamName,
+                name:student.studentName+(teamName?' ['+teamName+']':''),stuClass:student.studentClass,category:comp.name,note:String(group.notes?.[i] || '').trim()}));
         }
     }
     if(!operations.length){showToast('没有新的参赛学生，请检查是否已经报名。','warning');return;}
