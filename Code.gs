@@ -6,7 +6,7 @@ const TABLES = {
   Results: ['id', 'year', 'studentId', 'competitionId', 'teamId', 'teamName', 'score', 'rank', 'note', 'version', 'deleted', 'lastOperationId', 'studentNameSnapshot', 'studentClassSnapshot', 'studentStatus'],
   Operations: ['id', 'request', 'table', 'recordId', 'before', 'after', 'status', 'actor', 'createdAt', 'completedAt']
 };
-const WRITES = ['register', 'updateScore', 'batchUpdateScores', 'deleteRegistration', 'addCompetition', 'editCompetition', 'deleteCompetition', 'toggleStatus'];
+const WRITES = ['register', 'registerStudentHub', 'updateScore', 'batchUpdateScores', 'deleteRegistration', 'addCompetition', 'editCompetition', 'deleteCompetition', 'toggleStatus'];
 const RANKS = ['', '冠军', '亚军', '季军', '第四名', '第五名', '第六名', '第七名', '第八名', '第九名', '第十名', '优秀奖'];
 
 function fail(code, message) { var e = new Error(message); e.code = code; throw e; }
@@ -55,6 +55,27 @@ function roleOf(p) {
   if (teacher && Array.from(teacher).length === 4 && p.auth_pwd === teacher) return 'teacher';
   return '';
 }
+function studentHubProofMessage(p) {
+  return [value(p.id), value(p.year), value(p.studentHubId), value(p.studentName),
+    value(p.studentClass), value(p.studentProofExpiresAt)].join('\n');
+}
+function verifyStudentHubProof(p) {
+  var secret = props().getProperty('STUDENT_API_KEY');
+  if (!secret) fail('CONFIG', 'Set STUDENT_API_KEY in Script Properties to verify StudentHub registration requests.');
+  var expires = Number(p.studentProofExpiresAt);
+  var now = Math.floor(Date.now() / 1000);
+  if (!Number.isSafeInteger(expires) || expires < now || expires > now + 600) {
+    fail('FORBIDDEN', 'StudentHub registration proof expired.');
+  }
+  var expected = Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(studentHubProofMessage(p), secret)
+  ).replace(/=+$/, '');
+  var actual = value(p.studentHubProof);
+  if (actual.length !== expected.length) fail('FORBIDDEN', 'Invalid StudentHub registration proof.');
+  var mismatch = 0;
+  for (var i = 0; i < expected.length; i++) mismatch |= expected.charCodeAt(i) ^ actual.charCodeAt(i);
+  if (mismatch !== 0) fail('FORBIDDEN', 'Invalid StudentHub registration proof.');
+}
 function jsonResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -78,9 +99,11 @@ function handleRequest(p, method) {
     if (isWrite || action === 'verifyPassword' || isRosterSync) {
       if (!role) fail('UNAUTHORIZED', 'Please sign in.');
       if (isRosterSync && role !== 'admin') fail('FORBIDDEN', 'Administrator permission required.');
-      if (isWrite && ['register', 'updateScore', 'batchUpdateScores'].indexOf(action) < 0 && role !== 'admin') fail('FORBIDDEN', 'Administrator permission required.');
+      if (isWrite && ['register', 'registerStudentHub', 'updateScore', 'batchUpdateScores'].indexOf(action) < 0 && role !== 'admin') fail('FORBIDDEN', 'Administrator permission required.');
+      if (action === 'registerStudentHub') verifyStudentHubProof(p);
     }
     if (action === 'verifyPassword') return jsonResponse({ status: 'success', role: role, version: SCRIPT_VERSION });
+    if (isRosterSync) fail('RETIRED', 'Student roster is read live from StudentHub; refresh the application.');
     var year = yearOf(p);
     var ss = database();
     if (props().getProperty('SCHEMA_VERSION') !== SCRIPT_VERSION) fail('MIGRATION_REQUIRED', 'Run migration in the script editor.');
@@ -88,7 +111,6 @@ function handleRequest(p, method) {
     lock = LockService.getScriptLock();
     if (!lock.tryLock(15000)) { lock = null; fail('BUSY', 'System busy. Retry later.'); }
     recoverPrepared(ss);
-    if (isRosterSync) return jsonResponse({ status: 'success', data: syncStudentRoster(ss, p, year) });
     if (action === 'batchUpdateScores') {
       if (!Array.isArray(p.operations) || p.operations.length < 1 || p.operations.length > 20) fail('VALIDATION', 'Batch must contain 1–20 score operations.');
       var outcomes = [];
@@ -108,15 +130,21 @@ function handleRequest(p, method) {
     var comps = table(ss, 'Competitions').filter(function(r) { return active(r, year); });
     var students = role ? table(ss, 'Students').filter(function(r) { return active(r, year); }) : [];
     var results = role ? table(ss, 'Results').filter(function(r) { return active(r, year); }) : [];
+    var hubMappings = role ? readStudentHubMappings(ss) : [];
+    var hubByLocalId = {};
+    hubMappings.forEach(function(m) { if (m.year === year) hubByLocalId[m.studentId] = m.hubStudentId; });
     var visible = results.filter(function(r) { return comps.some(function(c) { return c.id === r.competitionId; }); }).map(function(r) {
       var student = students.find(function(s) { return s.id === r.studentId; });
       var comp = comps.find(function(c) { return c.id === r.competitionId; });
+      var fallbackName = value(r.studentNameSnapshot) || (student ? student.studentName : '');
+      var fallbackClass = value(r.studentClassSnapshot) || (student ? student.studentClass : '');
+      var studentHubId = hubByLocalId[value(r.studentId)] || (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value(r.studentId)) ? value(r.studentId) : '');
       return Object.assign({}, r, { score: value(r.score), rank: value(r.rank), note: value(r.note),
-        studentName: (student ? student.studentName : value(r.studentNameSnapshot)) + (r.teamName ? ' [' + r.teamName + ']' : ''),
-        studentClass: student ? student.studentClass : value(r.studentClassSnapshot), category: comp.name });
+        studentName: fallbackName + (r.teamName ? ' [' + r.teamName + ']' : ''),
+        studentClass: fallbackClass, studentHubId: studentHubId, category: comp.name });
     });
     var years = Array.from(new Set(table(ss, 'Competitions').filter(function(r) { return value(r.deleted) !== 'true'; }).map(function(r) { return value(r.year); }).concat([year]))).sort();
-    if (action === 'getSnapshot') return jsonResponse({ status: 'success', data: { competitions: comps, students: students, results: visible, years: years, authenticated: !!role }, version: SCRIPT_VERSION });
+    if (action === 'getSnapshot') return jsonResponse({ status: 'success', data: { competitions: comps, students: students, results: visible, years: years, authenticated: !!role, rosterYear: value(props().getProperty('ROSTER_YEAR')) }, version: SCRIPT_VERSION });
     if (action === 'getCompetitions') return jsonResponse({ status: 'success', data: comps });
     if (action === 'getStudents' || action === 'getResults') {
       if (!role) fail('UNAUTHORIZED', 'Sign in to view student records.');
@@ -138,8 +166,8 @@ function recoverPrepared(ss) {
   });
 }
 function requestKey(p) {
-  // Ignore transport-only/UI fields; never put passwords in the operation journal.
-  var keys = ['action','year','recordId','competitionId','studentId','teamId','teamName','expectedVersion','name','organizer','startDate','endDate','newName','status','score','rank','note'];
+  // Ignore transport-only/UI fields; never put passwords or StudentHub proofs in the operation journal.
+  var keys = ['action','year','recordId','competitionId','studentId','studentHubId','studentName','studentClass','teamId','teamName','expectedVersion','name','organizer','startDate','endDate','newName','status','score','rank','note'];
   var obj = {}; keys.forEach(function(k) { if (p[k] !== undefined) obj[k] = p[k]; }); return JSON.stringify(obj);
 }
 function checkVersion(row, p) {
@@ -150,6 +178,25 @@ function dateField(v) {
   if (!s) return '';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || isNaN(Date.parse(s)) || new Date(s).toISOString().slice(0, 10) !== s) fail('VALIDATION', 'Invalid date.');
   return s;
+}
+function readStudentHubMappings(ss) {
+  var sheet = ss.getSheetByName('_StudentHubMap_v1');
+  if (!sheet) return [];
+  var data = sheet.getDataRange().getValues();
+  var headers = ['hubStudentId','year','studentId'];
+  if (JSON.stringify(data[0]) !== JSON.stringify(headers)) fail('SCHEMA', 'Unexpected headers: StudentHub map.');
+  var seen = new Set();
+  return data.slice(1).filter(function(r) { return value(r[0]) !== ''; }).map(function(r) {
+    var mapping = {hubStudentId:value(r[0]),year:value(r[1]),studentId:value(r[2])};
+    var key = JSON.stringify([mapping.year,mapping.hubStudentId]);
+    if (!mapping.hubStudentId || !mapping.year || !mapping.studentId || seen.has(key)) fail('SCHEMA', 'Duplicate or invalid StudentHub mapping.');
+    seen.add(key); return mapping;
+  });
+}
+function localStudentIdsForHub(ss, year, hubId) {
+  var rows = readStudentHubMappings(ss).filter(function(m) { return m.year === year && m.hubStudentId === hubId; });
+  if (rows.length > 1) fail('SCHEMA', 'Duplicate StudentHub mapping.');
+  return rows.map(function(m) { return m.studentId; });
 }
 function writeAction(ss, p, year, role) {
   if (!/^[A-Za-z0-9_-]{10,100}$/.test(value(p.id))) fail('VALIDATION', 'A unique operation ID is required.');
@@ -186,18 +233,33 @@ function writeAction(ss, p, year, role) {
     var comp = comps.find(function(c) { return c.id === p.competitionId && active(c, year); });
     if (!comp) fail('NOT_FOUND', 'Competition not found.');
     var rows = table(ss, 'Results');
-    if (action === 'register') {
+    if (action === 'register' || action === 'registerStudentHub') {
       var today = Utilities.formatDate(new Date(), 'Asia/Kuala_Lumpur', 'yyyy-MM-dd');
       if (comp.status !== 'open' || (comp.startDate && today < comp.startDate) || (comp.endDate && today > comp.endDate)) fail('VALIDATION', 'Registration is closed.');
-      var student = table(ss, 'Students').find(function(s) { return s.id === p.studentId && active(s, year); });
-      if (!student) fail('VALIDATION', 'Student not found in this year.');
-      if (rows.some(function(r) { return active(r, year) && r.studentId === student.id && r.competitionId === comp.id; })) fail('CONFLICT', 'Student already registered. Refresh to review.');
+      var isHubRegistration = action === 'registerStudentHub';
+      var student, studentHubId = '', resultStudentId = '';
+      if (isHubRegistration) {
+        studentHubId = textField(p.studentHubId, 'StudentHub student ID', 100, true);
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(studentHubId)) fail('VALIDATION', 'Invalid StudentHub student ID.');
+        var studentName = textField(p.studentName, 'student name', 160, true);
+        var studentClass = textField(p.studentClass, 'class', 100, true);
+        var localIds = localStudentIdsForHub(ss, year, studentHubId);
+        var possibleIds = [studentHubId].concat(localIds);
+        if (rows.some(function(r) { return active(r, year) && r.competitionId === comp.id && possibleIds.indexOf(value(r.studentId)) >= 0; })) fail('CONFLICT', 'Student already registered. Refresh to review.');
+        resultStudentId = studentHubId;
+        student = {id:studentHubId,studentName:studentName,studentClass:studentClass};
+      } else {
+        student = table(ss, 'Students').find(function(s) { return s.id === p.studentId && active(s, year); });
+        if (!student) fail('VALIDATION', 'Student not found in this year.');
+        if (rows.some(function(r) { return active(r, year) && r.studentId === student.id && r.competitionId === comp.id; })) fail('CONFLICT', 'Student already registered. Refresh to review.');
+        resultStudentId = student.id;
+      }
       var teamName = textField(p.teamName, 'team name', 100, false);
       var teamId = textField(p.teamId, 'team ID', 100, false);
       if (!!teamName !== !!teamId) fail('VALIDATION', 'Team name and ID must be supplied together.');
       if (teamId && !/^[A-Za-z0-9_-]{10,100}$/.test(teamId)) fail('VALIDATION', 'Invalid team ID.');
       if (teamId && rows.some(function(r) { return active(r, year) && r.teamId === teamId && (r.competitionId !== comp.id || r.teamName !== teamName); })) fail('VALIDATION', 'Team ID belongs to another team.');
-      after = { id: Utilities.getUuid(), year: year, studentId: student.id, competitionId: comp.id, teamId: teamId, teamName: teamName,
+      after = { id: Utilities.getUuid(), year: year, studentId: resultStudentId, competitionId: comp.id, teamId: teamId, teamName: teamName,
         score: '', rank: '', note: textField(p.note, 'note', 1000, false), version: 0, deleted: false,
         studentNameSnapshot:student.studentName, studentClassSnapshot:student.studentClass, studentStatus:'active' };
     } else {
@@ -226,133 +288,6 @@ function writeAction(ss, p, year, role) {
   return { status: 'success', data: after };
 }
 
-/**
- * Admin-only full roster sync from the authenticated StudentHub server proxy.
- * A separate map sheet preserves local student IDs and therefore all result links.
- */
-function syncStudentRoster(ss, p, year) {
-  var configuredYear = props().getProperty('ROSTER_YEAR');
-  if (!configuredYear) fail('CONFIG', 'Set ROSTER_YEAR in Script Properties before syncing.');
-  if (yearOf({year:configuredYear}) !== year) fail('VALIDATION', 'Only the configured ROSTER_YEAR may be synchronized.');
-  var input = p.students;
-  if (!Array.isArray(input) || input.length < 1 || input.length > 5000) fail('VALIDATION', 'Roster must contain 1–5000 students.');
-  var seenIds = new Set(), keyCounts = {};
-  var incoming = input.map(function(raw) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('VALIDATION', 'Invalid StudentHub student.');
-    var hubStudentId = textField(raw.id, 'StudentHub student ID', 100, true);
-    var studentName = textField(raw.name, 'student name', 160, true).toUpperCase();
-    var studentClass = textField(raw.className, 'class', 100, true).toUpperCase();
-    if (!/^[A-Za-z0-9_-]{5,100}$/.test(hubStudentId) || /[\u0000-\u001f\u007f\ufffd]/.test(studentName + studentClass)) fail('VALIDATION', 'Invalid StudentHub student fields.');
-    if (seenIds.has(hubStudentId)) fail('VALIDATION', 'Duplicate StudentHub student ID.');
-    seenIds.add(hubStudentId);
-    var key = JSON.stringify([studentClass, studentName]);
-    keyCounts[key] = (keyCounts[key] || 0) + 1;
-    return {hubStudentId:hubStudentId,studentName:studentName,studentClass:studentClass,key:key};
-  });
-  var ssStudents = table(ss, 'Students');
-  var originalStudents = ssStudents.map(function(r) { return Object.assign({}, r); });
-  var results = table(ss, 'Results');
-  var mapSheet = ss.getSheetByName('_StudentHubMap_v1');
-  var mapData = mapSheet ? mapSheet.getDataRange().getValues() : [['hubStudentId','year','studentId']];
-  var mapHeaders = ['hubStudentId','year','studentId'];
-  if (JSON.stringify(mapData[0]) !== JSON.stringify(mapHeaders)) fail('SCHEMA', 'Unexpected headers: StudentHub map.');
-  var mappings = mapData.slice(1).filter(function(r) { return value(r[0]) !== ''; }).map(function(r) {
-    return {hubStudentId:value(r[0]),year:value(r[1]),studentId:value(r[2])};
-  });
-  var mapKeys = new Set();
-  mappings.forEach(function(m) {
-    var key = JSON.stringify([m.year,m.hubStudentId]);
-    if (!m.hubStudentId || !m.studentId || mapKeys.has(key)) fail('SCHEMA', 'Duplicate or invalid StudentHub mapping.');
-    mapKeys.add(key);
-  });
-  var yearMappings = mappings.filter(function(m) { return m.year === year; });
-  var currentMapIds = new Set(yearMappings.map(function(m) { return m.studentId; }));
-  var localById = new Map();
-  ssStudents.forEach(function(s) {
-    if (value(s.year) === year) {
-      if (localById.has(value(s.id))) fail('SCHEMA', 'Duplicate local student ID.');
-      localById.set(value(s.id), s);
-    }
-  });
-  yearMappings.forEach(function(m) {
-    var local = localById.get(m.studentId);
-    if (!local) fail('SCHEMA', 'StudentHub mapping references a missing local student.');
-  });
-  var assigned = new Set(), included = new Set(), additions = 0, updates = 0, mappingAdded = 0;
-  incoming.forEach(function(source) {
-    var mapped = yearMappings.find(function(m) { return m.hubStudentId === source.hubStudentId; });
-    var student = mapped ? localById.get(mapped.studentId) : null;
-    if (mapped && assigned.has(student.id)) fail('SCHEMA', 'Multiple StudentHub IDs map to one local student.');
-    if (!mapped) {
-      var candidates = ssStudents.filter(function(s) {
-        return active(s, year) && !currentMapIds.has(value(s.id)) && !assigned.has(value(s.id))
-          && value(s.studentClass).trim().toUpperCase() === source.studentClass
-          && value(s.studentName).trim().toUpperCase() === source.studentName;
-      });
-      if (candidates.length > 1 || (candidates.length === 1 && keyCounts[source.key] > 1)) {
-        fail('VALIDATION', 'Ambiguous existing student match; no roster changes were made.');
-      }
-      student = candidates[0] || null;
-      if (!student) {
-        student = {id:Utilities.getUuid(),year:year,studentClass:source.studentClass,studentName:source.studentName,
-          version:1,deleted:false,lastOperationId:'studenthub-sync'};
-        ssStudents.push(student); localById.set(student.id, student); additions++;
-      }
-      mappings.push({hubStudentId:source.hubStudentId,year:year,studentId:student.id});
-      currentMapIds.add(student.id); mappingAdded++;
-    }
-    assigned.add(value(student.id)); included.add(value(student.id));
-    var changed = value(student.studentClass).trim().toUpperCase() !== source.studentClass
-      || value(student.studentName).trim().toUpperCase() !== source.studentName
-      || value(student.deleted) === 'true';
-    if (changed) {
-      student.studentClass = source.studentClass; student.studentName = source.studentName;
-      student.deleted = false; student.version = Number(student.version || 0) + 1;
-      student.lastOperationId = 'studenthub-sync'; updates++;
-    }
-  });
-  // Snapshot each existing result before deactivating absent students or applying a renamed source record.
-  var originalById = new Map(originalStudents.map(function(s) { return [value(s.id), s]; }));
-  results.forEach(function(result) {
-    if (value(result.year) !== year) return;
-    var previous = originalById.get(value(result.studentId));
-    if (!previous) return;
-    if (!value(result.studentNameSnapshot)) result.studentNameSnapshot = value(previous.studentName);
-    if (!value(result.studentClassSnapshot)) result.studentClassSnapshot = value(previous.studentClass);
-    result.studentStatus = included.has(value(previous.id)) ? 'active' : 'left';
-  });
-  var deactivated = 0;
-  ssStudents.forEach(function(student) {
-    if (value(student.year) === year && active(student, year) && !included.has(value(student.id))) {
-      student.deleted = true; student.version = Number(student.version || 0) + 1;
-      student.lastOperationId = 'studenthub-sync'; deactivated++;
-    }
-  });
-  function ensureCapacity(sheet, neededRows) {
-    if (typeof sheet.getMaxRows === 'function' && sheet.getMaxRows() < neededRows) {
-      sheet.insertRowsAfter(sheet.getMaxRows(), neededRows - sheet.getMaxRows());
-    }
-  }
-  var studentSheet = ss.getSheetByName('Students_v7');
-  var studentValues = [TABLES.Students].concat(ssStudents.map(function(s) { return TABLES.Students.map(function(k) { return cell(s[k]); }); }));
-  ensureCapacity(studentSheet, studentValues.length);
-  studentSheet.getRange(1, 1, studentValues.length, TABLES.Students.length).setValues(studentValues);
-  if (results.length) {
-    var resultSheet = ss.getSheetByName('Results_v7');
-    var resultValues = [TABLES.Results].concat(results.map(function(r) { return TABLES.Results.map(function(k) { return cell(r[k]); }); }));
-    ensureCapacity(resultSheet, resultValues.length);
-    resultSheet.getRange(1, 1, resultValues.length, TABLES.Results.length).setValues(resultValues);
-  }
-  if (!mapSheet) mapSheet = ss.insertSheet('_StudentHubMap_v1');
-  var mapValues = [mapHeaders].concat(mappings.map(function(m) { return [m.hubStudentId,m.year,m.studentId]; }));
-  ensureCapacity(mapSheet, mapValues.length);
-  mapSheet.clearContents();
-  mapSheet.getRange(1, 1, mapValues.length, mapHeaders.length).setValues(mapValues);
-  SpreadsheetApp.flush();
-  return {year:year,activeCount:included.size,createdCount:additions,updatedCount:updates,deactivatedCount:deactivated,mappedCount:mappingAdded};
-}
-
-/** Run only in Apps Script editor. Set LEGACY_YEAR explicitly and review the backup URL. */
 function migrateLegacyDatabase() {
   var lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {

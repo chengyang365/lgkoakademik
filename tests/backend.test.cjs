@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');const vm=require('node:vm');const crypto=require('node:crypto');
 const code=fs.readFileSync(require('node:path').join(__dirname,'../Code.gs'),'utf8');
 function fixture(){
- const properties={ADMIN_PWD:'test-admin-long-secret',TEACHER_PWD:'T4ch',SCHEMA_VERSION:'7.0',LEGACY_YEAR:'2026'};
+ const properties={ADMIN_PWD:'test-admin-long-secret',TEACHER_PWD:'T4ch',STUDENT_API_KEY:'studenthub-api-key-test-only',ROSTER_YEAR:'2026',SCHEMA_VERSION:'7.0',LEGACY_YEAR:'2026'};
  let held=false,failTarget=null;
  class Sheet{
   constructor(name,rows=[]){this.name=name;this.rows=structuredClone(rows);}
@@ -19,7 +19,7 @@ function fixture(){
  const ctx=vm.createContext({console,Date,PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties[k]||null,setProperty:(k,v)=>properties[k]=v})},
  SpreadsheetApp:{getActiveSpreadsheet:()=>ss,openById:()=>ss,flush(){}},
  ContentService:{MimeType:{JSON:'json'},createTextOutput:text=>({text,setMimeType(){return this;}})},
- Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:()=> '2026-09-26'},
+ Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:()=> '2026-09-26',computeHmacSha256Signature:(message,key)=>Array.from(crypto.createHmac('sha256',key).update(message).digest()),base64EncodeWebSafe:bytes=>Buffer.from(bytes).toString('base64url')},
  LockService:{getScriptLock:()=>({tryLock(){assert.equal(held,false);held=true;return true;},waitLock(){held=true;},releaseLock(){held=false;}})}});
  vm.runInContext(code,ctx);
  const schema=vm.runInContext('TABLES',ctx);
@@ -63,6 +63,48 @@ test('teacher password must be exactly four characters; admin authentication is 
  for(const pass of ['T4c','T4chx','teacher-long-pass']){
   f.properties.TEACHER_PWD=pass;assert.equal(f.call({action:'verifyPassword',auth_pwd:pass}).code,'UNAUTHORIZED');
  }
+});
+
+function signedHubRegistration(f, fields={}) {
+ const payload=f.request('registerStudentHub',{studentHubId:'1f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a',
+  studentName:'陈小明 TAN XIAO MING',studentClass:'3A',competitionId:'comp-2026',teamId:'',teamName:'',note:'',...fields});
+ payload.studentProofExpiresAt=String(Math.floor(Date.now()/1000)+300);
+ const message=[payload.id,payload.year,payload.studentHubId,payload.studentName,payload.studentClass,payload.studentProofExpiresAt].join('\n');
+ payload.studentHubProof=crypto.createHmac('sha256',f.properties.STUDENT_API_KEY).update(message).digest('base64url');
+ return payload;
+}
+test('legacy live-roster sheet writer is retired and leaves the roster unchanged',()=>{
+ const f=fixture(),before=JSON.stringify(f.rows('Students'));
+ assert.equal(f.call(f.request('syncStudentRoster',{students:[]})).code,'RETIRED');
+ assert.equal(JSON.stringify(f.rows('Students')),before);
+});
+test('StudentHub registration accepts a signed live identity without writing the roster sheet',()=>{
+ const f=fixture();const studentCount=f.rows('Students').length;
+ const payload=signedHubRegistration(f);
+ const saved=f.call(payload);
+ assert.equal(saved.status,'success');
+ assert.equal(saved.data.studentId,payload.studentHubId);
+ assert.equal(saved.data.studentNameSnapshot,'陈小明 TAN XIAO MING');
+ assert.equal(saved.data.studentClassSnapshot,'3A');
+ assert.equal(f.rows('Students').length,studentCount);
+ const snapshot=f.call(f.request('getSnapshot'));
+ const row=snapshot.data.results.find(r=>r.studentId===payload.studentHubId);
+ assert.equal(row.studentName,'陈小明 TAN XIAO MING');
+ assert.equal(row.studentHubId,payload.studentHubId);
+ assert.equal(snapshot.data.rosterYear,'2026');
+});
+test('StudentHub registration requires a valid server signature',()=>{
+ const f=fixture();const payload=signedHubRegistration(f);payload.studentHubProof='invalid';
+ assert.equal(f.call(payload).code,'FORBIDDEN');
+ assert.equal(f.rows('Results').length,1);
+ assert.equal(f.rows('Operations').length,0);
+});
+test('StudentHub registration checks old local IDs through the preserved mapping',()=>{
+ const f=fixture();const hubId='1f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a';
+ f.ss.insertSheet('_StudentHubMap_v1').rows=[['hubStudentId','year','studentId'],[hubId,'2026','student-2026']];
+ const payload=signedHubRegistration(f,{studentHubId:hubId});
+ assert.equal(f.call(payload).code,'CONFLICT');
+ assert.equal(f.rows('Results').length,1);
 });
 test('zero score survives snapshot and note saves together with score',()=>{
  const f=fixture();let r=f.call(f.request('getSnapshot'));assert.equal(r.data.results[0].score,'0');
@@ -151,45 +193,4 @@ test('annual roster import is append-only and idempotent for matching students',
  f.ctx.importStudentRosterForYear();assert.equal(f.rows('Students').length,2);assert.equal(f.rows('Students')[1].year,'2027');
  f.ctx.importStudentRosterForYear();assert.equal(f.rows('Students').length,2);
  source.rows.push(['2A','Alice']);assert.throws(()=>f.ctx.importStudentRosterForYear(),/Duplicate/);assert.equal(f.rows('Students').length,2);
-});
-
-test('StudentHub sync preserves local IDs, soft-departs missing students, and keeps score history',()=>{
- const f=fixture();f.properties.ROSTER_YEAR='2026';
- const sync=students=>f.request('syncStudentRoster',{students});
- const first=f.call(sync([{id:'hub-alice',name:'Alice',className:'1A'},{id:'hub-bob',name:'Bob',className:'2A'}]));
- assert.equal(first.status,'success');assert.equal(first.data.createdCount,1);assert.equal(first.data.activeCount,2);
- const map=f.sheets._StudentHubMap_v1.rows.slice(1);
- const alice=map.find(r=>r[0]==='hub-alice');assert.equal(alice[2],'student-2026');
- assert.equal(f.rows('Results')[0].studentNameSnapshot,'Alice');
- const second=f.call(sync([{id:'hub-bob',name:'Bob',className:'2A'}]));
- assert.equal(second.status,'success');assert.equal(second.data.deactivatedCount,1);
- const students=f.rows('Students');assert.equal(students.find(s=>s.id==='student-2026').deleted,true);
- const snapshot=f.call(f.request('getSnapshot'));
- assert.equal(snapshot.data.students.some(s=>s.id==='student-2026'),false);
- assert.equal(snapshot.data.results[0].studentName,'Alice');
- assert.equal(snapshot.data.results[0].studentClass,'1A');
- assert.equal(snapshot.data.results[0].studentStatus,'left');
- assert.equal(f.call(f.request('register',{studentId:'student-2026',competitionId:'comp-2026'})).code,'VALIDATION');
- const third=f.call(sync([{id:'hub-bob',name:'Bob',className:'2A'}]));
- assert.equal(third.data.createdCount,0);assert.equal(third.data.activeCount,1);
- assert.equal(f.sheets._StudentHubMap_v1.rows.length,3);
-});
-test('StudentHub sync is admin-only and refuses unsafe or ambiguous full rosters before writing',()=>{
- const f=fixture();f.properties.ROSTER_YEAR='2026';
- const students=[{id:'hub-alice',name:'Alice',className:'1A'}];
- assert.equal(f.call(f.request('syncStudentRoster',{auth_pwd:f.properties.TEACHER_PWD,students})).code,'FORBIDDEN');
- assert.equal(f.call(f.request('syncStudentRoster',{students:[]})).code,'VALIDATION');
- const ambiguous=f.call(f.request('syncStudentRoster',{students:[
-  {id:'hub-alice-1',name:'Alice',className:'1A'},{id:'hub-alice-2',name:'Alice',className:'1A'}
- ]}));
- assert.equal(ambiguous.code,'VALIDATION');
- assert.equal(f.rows('Students').length,1);assert.equal(f.rows('Results').length,1);
- assert.equal(f.ss.getSheetByName('_StudentHubMap_v1'),null);
-});
-test('StudentHub sync requires the configured roster year',()=>{
- const f=fixture();
- assert.equal(f.call(f.request('syncStudentRoster',{students:[{id:'hub-alice',name:'Alice',className:'1A'}]})).code,'CONFIG');
- f.properties.ROSTER_YEAR='2027';
- assert.equal(f.call(f.request('syncStudentRoster',{students:[{id:'hub-alice',name:'Alice',className:'1A'}]})).code,'VALIDATION');
- assert.equal(f.rows('Students').length,1);
 });

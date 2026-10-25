@@ -78,7 +78,7 @@ const mergePending = results => {
         if (item.action === 'updateScore' && row) { row.score=item.score; row.rank=item.rank; if(item.note!==undefined) row.note=item.note; row.pending=true; }
         if (item.action === 'deleteRegistration' && row) row.pending=true;
         if (item.action === 'register' && !rows.some(r => r.studentId===item.studentId && r.competitionId===item.competitionId)) {
-            rows.push({id:'pending-'+item.id,studentId:item.studentId,competitionId:item.competitionId,year:item.year,
+            rows.push({id:'pending-'+item.id,studentId:item.studentId || item.studentHubId,studentHubId:item.studentHubId || '',competitionId:item.competitionId,year:item.year,
                 studentName:item.name,studentClass:item.stuClass,category:item.category,teamId:item.teamId,teamName:item.teamName,
                 score:'',rank:'',note:item.note,version:0,pending:true});
         }
@@ -97,11 +97,26 @@ const fetchAllData = async (background = false) => {
         if (!snapshot || !Array.isArray(snapshot.competitions) || !Array.isArray(snapshot.results) || !Array.isArray(snapshot.students)) throw new Error('服务器数据格式不正确。');
         if (credential && !snapshot.authenticated) { logout(); throw new Error('密码已失效，请重新登录。'); }
         state.competitionItems=snapshot.competitions; state.availableYears=snapshot.years;
-        state.studentRows=snapshot.students; state.studentDB={};
-        for(const s of snapshot.students) (state.studentDB[s.studentClass] ||= []).push(s.studentName);
-        state.classList=Object.keys(state.studentDB).sort();
         state.unsyncedQueue=loadOutbox();
         state.dbResults=credential ? mergePending(snapshot.results) : [];
+        state.studentRows=[]; state.studentDB={}; state.classList=[];
+        let roster=(credential ? snapshot.students : []).map(s=>({...s,source:'local'}));
+        if (credential && String(snapshot.rosterYear || '') === year) {
+            const rosterResponse=await fetch('/api/students', {
+                method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+                cache:'no-store', body:JSON.stringify({year,auth_pwd:credential})
+            });
+            let rosterResult;
+            try { rosterResult=await rosterResponse.json(); } catch (_) { throw new Error('StudentHub 名单服务返回了无效响应。'); }
+            if (!rosterResponse.ok || rosterResult.success!==true || !rosterResult.data || !Array.isArray(rosterResult.data.items)) {
+                const error=new Error(rosterResult.message || 'StudentHub 实时名单读取失败。');
+                error.code=rosterResult.code || 'ROSTER_UNAVAILABLE'; throw error;
+            }
+            roster=rosterResult.data.items.map(s=>({...s,source:'studenthub'}));
+        }
+        state.studentRows=roster; state.studentDB={};
+        for(const s of roster) (state.studentDB[s.studentClass] ||= []).push(s.studentName);
+        state.classList=Object.keys(state.studentDB).sort();
         state.isOfflineMode=false; state.lastSync=new Date().toISOString();
         try { localStorage.setItem(cacheKey(year), JSON.stringify({...snapshot,lastSync:state.lastSync})); }
         catch(_) { showToast('数据已读取，但本机缓存空间不足。','warning'); }
@@ -111,28 +126,6 @@ const fetchAllData = async (background = false) => {
         if(!background) showToast(e.message || '连接失败，保留本机资料。','warning');
     } finally {
         if(seq===refreshSequence) {state.isInitializing=false;state.isRefreshing=false;updateDOM();}
-    }
-};
-const syncStudentRosterFromHub = async () => {
-    if (state.role !== 'admin' || !state.adminPwd) { showToast('只有管理员可以同步学生名单。','error'); return; }
-    if (state.isRosterSyncing) return;
-    state.isRosterSyncing=true; updateDOM();
-    const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),60000);
-    try {
-        const response=await fetch('/api/sync-students', {
-            method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
-            cache:'no-store', signal:controller.signal,
-            body:JSON.stringify({year:String(state.selectedYear),auth_pwd:state.adminPwd})
-        });
-        let result;
-        try { result=await response.json(); } catch (_) { throw new Error('名单同步服务返回了无效响应。'); }
-        if(!response.ok || result.success!==true || !result.data) throw new Error(result.message || '名单同步失败。');
-        await fetchAllData(false);
-        showToast('StudentHub 名单已同步：'+result.data.activeCount+' 名在册学生。','success');
-    } catch(e) {
-        showToast(e.name==='AbortError'?'名单同步超时，请稍后重试。':(e.message||'名单同步失败。'),'error');
-    } finally {
-        clearTimeout(timer); state.isRosterSyncing=false; updateDOM();
     }
 };
 const initLocalCache = () => {
@@ -168,6 +161,18 @@ const queueMutations = async operations => {
         return true;
     } catch(e) {showToast(e.message,'error');return false;}
 };
+const registerStudentViaProxy = async (item, credential) => {
+    const response=await fetch('/api/register-student', {
+        method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', cache:'no-store',
+        body:JSON.stringify({...item,auth_pwd:credential})
+    });
+    let result;
+    try { result=await response.json(); } catch (_) { throw new Error('报名服务返回了无效响应。'); }
+    if (!response.ok || result.success!==true) {
+        const error=new Error(result.message || '报名提交失败。'); error.code=result.code || 'SERVER'; throw error;
+    }
+    return result;
+};
 const syncQueueData = async (silent = false) => {
     if(syncing || !state.adminPwd) {if(!silent && !state.adminPwd) showToast('请先登录，再补传。','warning');return;}
     syncing=true;
@@ -183,10 +188,16 @@ const syncQueueData = async (silent = false) => {
                         if(batch.length===20 || op.action!=='updateScore' || op.year!==item.year || op.syncStatus==='blocked') break;
                         batch.push(op);
                     }
-                    const response=batch.length>1
-                        ? await apiRequest({action:'batchUpdateScores',year:item.year,operations:batch,auth_pwd:state.adminPwd})
-                        : await apiRequest({...item,auth_pwd:state.adminPwd});
-                    const outcomes=batch.length>1 ? response.outcomes : [{id:item.id,status:'success'}];
+                    let response, outcomes;
+                    if (item.action==='register' && item.studentHubId) {
+                        await registerStudentViaProxy(item,state.adminPwd);
+                        outcomes=[{id:item.id,status:'success'}];
+                    } else {
+                        response=batch.length>1
+                            ? await apiRequest({action:'batchUpdateScores',year:item.year,operations:batch,auth_pwd:state.adminPwd})
+                            : await apiRequest({...item,auth_pwd:state.adminPwd});
+                        outcomes=batch.length>1 ? response.outcomes : [{id:item.id,status:'success'}];
+                    }
                     if(!Array.isArray(outcomes) || !outcomes.length) throw new Error('服务器没有返回保存凭证，已保留待上传操作。');
                     for(const outcome of outcomes) {
                         if(outcome.id!==queue[0]?.id) throw new Error('服务器返回顺序异常，已保留待上传操作。');
