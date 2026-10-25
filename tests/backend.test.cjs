@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');const vm=require('node:vm');const crypto=require('node:crypto');
 const code=fs.readFileSync(require('node:path').join(__dirname,'../Code.gs'),'utf8');
 function fixture(){
- const properties={ADMIN_PWD:'test-admin-long-secret',TEACHER_PWD:'test-teacher-long-secret',SCHEMA_VERSION:'7.0',LEGACY_YEAR:'2026'};
+ const properties={ADMIN_PWD:'test-admin-long-secret',TEACHER_PWD:'T4ch',SCHEMA_VERSION:'7.0',LEGACY_YEAR:'2026'};
  let held=false,failTarget=null;
  class Sheet{
   constructor(name,rows=[]){this.name=name;this.rows=structuredClone(rows);}
@@ -44,10 +44,25 @@ test('student names/results remain private while public competitions are readabl
  const f=fixture();const r=f.call({action:'getSnapshot',year:'2026'});assert.equal(r.data.competitions.length,1);assert.equal(r.data.students.length,0);assert.equal(r.data.results.length,0);
  assert.equal(f.call({action:'getStudents',year:'2026'}).code,'UNAUTHORIZED');
 });
-test('teacher may score but may not delete registrations or administer competitions',()=>{
+test('four-character teacher may view, register and score, but cannot administer competitions',()=>{
  const f=fixture();const auth_pwd=f.properties.TEACHER_PWD;
+ assert.equal(f.call({action:'verifyPassword',auth_pwd}).role,'teacher');
+ const snapshot=f.call(f.request('getSnapshot',{auth_pwd}));
+ assert.equal(snapshot.data.authenticated,true);assert.equal(snapshot.data.results.length,1);
+ f.put('Students',{id:'student-2026-2',year:'2026',studentClass:'2A',studentName:'Bob',version:1,deleted:false,lastOperationId:'seed'});
+ assert.equal(f.call(f.request('register',{auth_pwd,studentId:'student-2026-2',competitionId:'comp-2026',teamId:'',teamName:'',note:''})).status,'success');
  assert.equal(f.call(f.score({auth_pwd})).status,'success');
- assert.equal(f.call(f.request('deleteRegistration',{auth_pwd})).code,'FORBIDDEN');
+ for(const action of ['deleteRegistration','addCompetition','editCompetition','deleteCompetition','toggleStatus']){
+  assert.equal(f.call(f.request(action,{auth_pwd,competitionId:'comp-2026',recordId:'result-2026',expectedVersion:1,newName:'Renamed',name:'Another'})).code,'FORBIDDEN',action);
+ }
+});
+test('teacher password must be exactly four characters; admin authentication is unchanged',()=>{
+ const f=fixture();
+ assert.equal(f.call({action:'verifyPassword',auth_pwd:f.properties.ADMIN_PWD}).role,'admin');
+ assert.equal(f.call({action:'verifyPassword',auth_pwd:f.properties.TEACHER_PWD}).role,'teacher');
+ for(const pass of ['T4c','T4chx','teacher-long-pass']){
+  f.properties.TEACHER_PWD=pass;assert.equal(f.call({action:'verifyPassword',auth_pwd:pass}).code,'UNAUTHORIZED');
+ }
 });
 test('zero score survives snapshot and note saves together with score',()=>{
  const f=fixture();let r=f.call(f.request('getSnapshot'));assert.equal(r.data.results[0].score,'0');
