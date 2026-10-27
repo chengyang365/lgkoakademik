@@ -55,26 +55,84 @@ function roleOf(p) {
   if (teacher && Array.from(teacher).length === 4 && p.auth_pwd === teacher) return 'teacher';
   return '';
 }
-function studentHubProofMessage(p) {
-  return [value(p.id), value(p.year), value(p.studentHubId), value(p.studentName),
-    value(p.studentClass), value(p.studentProofExpiresAt)].join('\n');
-}
-function verifyStudentHubProof(p) {
-  var secret = props().getProperty('STUDENT_API_KEY');
-  if (!secret) fail('CONFIG', 'Set STUDENT_API_KEY in Script Properties to verify StudentHub registration requests.');
-  var expires = Number(p.studentProofExpiresAt);
-  var now = Math.floor(Date.now() / 1000);
-  if (!Number.isSafeInteger(expires) || expires < now || expires > now + 600) {
-    fail('FORBIDDEN', 'StudentHub registration proof expired.');
-  }
-  var expected = Utilities.base64EncodeWebSafe(
-    Utilities.computeHmacSha256Signature(studentHubProofMessage(p), secret)
-  ).replace(/=+$/, '');
-  var actual = value(p.studentHubProof);
-  if (actual.length !== expected.length) fail('FORBIDDEN', 'Invalid StudentHub registration proof.');
-  var mismatch = 0;
-  for (var i = 0; i < expected.length; i++) mismatch |= expected.charCodeAt(i) ^ actual.charCodeAt(i);
-  if (mismatch !== 0) fail('FORBIDDEN', 'Invalid StudentHub registration proof.');
+function readStudentHubRoster() {
+  var apiKey = props().getProperty('STUDENT_API_KEY');
+  if (!apiKey) fail('CONFIG', 'Set STUDENT_API_KEY in Apps Script Properties.');
+  var byId = {}, displayKeys = new Set(), offset = 0;
+  var expectedTotal = null, expectedCursor = null, expectedSchool = null, pages = 0;
+  do {
+    if (++pages > 20) fail('ROSTER_LIMIT', 'StudentHub roster exceeds the read limit.');
+    var url = 'https://lgstudenthub.vercel.app/api/students?limit=500&offset=' + offset;
+    var response;
+    try {
+      response = UrlFetchApp.fetch(url, {
+        headers: { Authorization: 'Bearer ' + apiKey },
+        muteHttpExceptions: true
+      });
+    } catch (e) {
+      fail('STUDENTHUB_UNAVAILABLE', 'Could not reach StudentHub. Please try again.');
+    }
+    var status = response.getResponseCode();
+    if (status < 200 || status >= 300) {
+      fail(status === 401 || status === 403 ? 'STUDENTHUB_AUTH' : 'STUDENTHUB_UNAVAILABLE',
+        status === 401 || status === 403 ? 'StudentHub rejected its server API key.' : 'StudentHub is temporarily unavailable.');
+    }
+    var body;
+    try { body = JSON.parse(response.getContentText()); }
+    catch (e) { fail('ROSTER_SCHEMA', 'StudentHub returned invalid JSON.'); }
+    var data = body && body.data;
+    if (!body || body.success !== true || !data || data.apiVersion !== 'v1' || !Array.isArray(data.items)
+      || !Number.isInteger(data.total) || data.total < 0 || !Number.isInteger(data.syncCursor)
+      || typeof data.schoolId !== 'string' || !data.schoolId.trim()
+      || !Number.isInteger(data.limit) || data.limit < 1 || data.limit > 500
+      || data.offset !== offset || data.items.length > data.limit) {
+      fail('ROSTER_SCHEMA', 'StudentHub returned an unsupported roster format.');
+    }
+    if (expectedTotal === null) {
+      expectedTotal = data.total; expectedCursor = data.syncCursor; expectedSchool = data.schoolId;
+    } else if (data.total !== expectedTotal || data.syncCursor !== expectedCursor
+      || data.schoolId !== expectedSchool) {
+      fail('ROSTER_CHANGED', 'StudentHub roster changed while it was being read. Please retry.');
+    }
+    data.items.forEach(function(item) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) fail('ROSTER_SCHEMA', 'Invalid StudentHub student record.');
+      var id = value(item.id).trim(), englishName = value(item.name).trim();
+      var chineseName = value(item.chineseName).trim(), studentClass = value(item.className).trim();
+      var studentName = [chineseName, englishName].filter(Boolean).join(' ');
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+        || !englishName || englishName.length > 160 || !studentClass || studentClass.length > 100
+        || !studentName || studentName.length > 160
+        || /[\u0000-\u001f\u007f\ufffd]/.test(studentName + studentClass)) {
+        fail('ROSTER_SCHEMA', 'StudentHub student is missing a valid ID, name, or class.');
+      }
+      if (byId[id]) fail('ROSTER_SCHEMA', 'StudentHub returned a duplicate student ID.');
+      var displayKey = JSON.stringify([studentClass.toUpperCase(), studentName.toUpperCase()]);
+      if (displayKeys.has(displayKey)) fail('ROSTER_AMBIGUOUS', 'Students in the same class have duplicate display names.');
+      displayKeys.add(displayKey);
+      byId[id] = {
+        id: id,
+        studentId: item.studentId === null || item.studentId === undefined ? '' : value(item.studentId).trim(),
+        name: englishName,
+        chineseName: chineseName,
+        studentName: studentName,
+        studentClass: studentClass,
+        updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : ''
+      };
+      if (Object.keys(byId).length > 2000) fail('ROSTER_LIMIT', 'StudentHub roster exceeds the read limit.');
+    });
+    var next = data.nextOffset;
+    if (next === null) {
+      if (Object.keys(byId).length !== expectedTotal) fail('ROSTER_INCOMPLETE', 'StudentHub roster is incomplete. Please retry.');
+      break;
+    }
+    if (!Number.isInteger(next) || next !== offset + data.items.length
+      || next >= expectedTotal || data.items.length === 0) {
+      fail('ROSTER_CURSOR', 'StudentHub returned an invalid page cursor.');
+    }
+    offset = next;
+  } while (true);
+  return { items: Object.keys(byId).map(function(id) { return byId[id]; }),
+    total: expectedTotal || 0, syncCursor: expectedCursor, schoolId: expectedSchool || '' };
 }
 function jsonResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
@@ -94,17 +152,31 @@ function handleRequest(p, method) {
     var action = value(p.action);
     var isWrite = WRITES.indexOf(action) >= 0;
     var isRosterSync = action === 'syncStudentRoster';
-    if ((isWrite || action === 'verifyPassword' || isRosterSync) && method !== 'POST') fail('METHOD', 'Use POST for writes and authentication.');
+    var isStudentHubRoster = action === 'getStudentHubRoster';
+    if ((isWrite || action === 'verifyPassword' || isRosterSync || isStudentHubRoster) && method !== 'POST') fail('METHOD', 'Use POST for writes and authentication.');
     var role = roleOf(p);
-    if (isWrite || action === 'verifyPassword' || isRosterSync) {
+    if (isWrite || action === 'verifyPassword' || isRosterSync || isStudentHubRoster) {
       if (!role) fail('UNAUTHORIZED', 'Please sign in.');
       if (isRosterSync && role !== 'admin') fail('FORBIDDEN', 'Administrator permission required.');
       if (isWrite && ['register', 'registerStudentHub', 'updateScore', 'batchUpdateScores'].indexOf(action) < 0 && role !== 'admin') fail('FORBIDDEN', 'Administrator permission required.');
-      if (action === 'registerStudentHub') verifyStudentHubProof(p);
     }
     if (action === 'verifyPassword') return jsonResponse({ status: 'success', role: role, version: SCRIPT_VERSION });
     if (isRosterSync) fail('RETIRED', 'Student roster is read live from StudentHub; refresh the application.');
     var year = yearOf(p);
+    var hubStudent = null;
+    if (isStudentHubRoster || action === 'registerStudentHub') {
+      if (value(props().getProperty('ROSTER_YEAR')) !== year) fail('ROSTER_YEAR', 'This year does not use the live StudentHub roster.');
+      var roster = readStudentHubRoster();
+      if (isStudentHubRoster) {
+        return jsonResponse({ status: 'success', data: {
+          items: roster.items, total: roster.total, schoolId: roster.schoolId, syncCursor: roster.syncCursor
+        }, version: SCRIPT_VERSION });
+      }
+      var hubId = textField(p.studentHubId, 'StudentHub student ID', 100, true);
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(hubId)) fail('VALIDATION', 'Invalid StudentHub student ID.');
+      hubStudent = roster.items.find(function(student) { return student.id === hubId; });
+      if (!hubStudent) fail('NOT_FOUND', 'This student is no longer in the active StudentHub roster.');
+    }
     var ss = database();
     if (props().getProperty('SCHEMA_VERSION') !== SCRIPT_VERSION) fail('MIGRATION_REQUIRED', 'Run migration in the script editor.');
     // Read snapshots use the same lock to avoid seeing half-completed journal writes.
@@ -126,7 +198,7 @@ function handleRequest(p, method) {
       }
       return jsonResponse({ status:'success', outcomes:outcomes });
     }
-    if (isWrite) return jsonResponse(writeAction(ss, p, year, role));
+    if (isWrite) return jsonResponse(writeAction(ss, p, year, role, hubStudent));
     var comps = table(ss, 'Competitions').filter(function(r) { return active(r, year); });
     var students = role ? table(ss, 'Students').filter(function(r) { return active(r, year); }) : [];
     var results = role ? table(ss, 'Results').filter(function(r) { return active(r, year); }) : [];
@@ -198,7 +270,7 @@ function localStudentIdsForHub(ss, year, hubId) {
   if (rows.length > 1) fail('SCHEMA', 'Duplicate StudentHub mapping.');
   return rows.map(function(m) { return m.studentId; });
 }
-function writeAction(ss, p, year, role) {
+function writeAction(ss, p, year, role, hubStudent) {
   if (!/^[A-Za-z0-9_-]{10,100}$/.test(value(p.id))) fail('VALIDATION', 'A unique operation ID is required.');
   var request = requestKey(p);
   var prior = table(ss, 'Operations').find(function(o) { return o.id === p.id; });
@@ -241,8 +313,9 @@ function writeAction(ss, p, year, role) {
       if (isHubRegistration) {
         studentHubId = textField(p.studentHubId, 'StudentHub student ID', 100, true);
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(studentHubId)) fail('VALIDATION', 'Invalid StudentHub student ID.');
-        var studentName = textField(p.studentName, 'student name', 160, true);
-        var studentClass = textField(p.studentClass, 'class', 100, true);
+        if (!hubStudent || hubStudent.id !== studentHubId) fail('NOT_FOUND', 'StudentHub identity could not be verified.');
+        var studentName = hubStudent.studentName;
+        var studentClass = hubStudent.studentClass;
         var localIds = localStudentIdsForHub(ss, year, studentHubId);
         var possibleIds = [studentHubId].concat(localIds);
         if (rows.some(function(r) { return active(r, year) && r.competitionId === comp.id && possibleIds.indexOf(value(r.studentId)) >= 0; })) fail('CONFLICT', 'Student already registered. Refresh to review.');
