@@ -16,10 +16,18 @@ function fixture(){
   }};}
  }
  const sheets={};const ss={getSheetByName:n=>sheets[n]||null,insertSheet:n=>sheets[n]=new Sheet(n),getName:()=> 'Test',copy:()=>({getUrl:()=> 'https://example.invalid/backup'})};
- const ctx=vm.createContext({console,Date,PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties[k]||null,setProperty:(k,v)=>properties[k]=v})},
+ const studentHubId='1f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a';
+ const studentHubItems=[{id:studentHubId,studentId:'21156',name:'TAN XIAO MING',chineseName:'陈小明',className:'3A',updatedAt:'2026-10-25T08:00:00.000Z'}];
+ const urlFetchCalls=[];
+ const ctx=vm.createContext({console,Date,URL,UrlFetchApp:{fetch:(url,options)=>{
+  urlFetchCalls.push({url,options});assert.equal(options.headers.Authorization,'Bearer '+properties.STUDENT_API_KEY);
+  const offset=Number((url.match(/[?&]offset=(\d+)/)||[])[1]||0),limit=Number((url.match(/[?&]limit=(\d+)/)||[])[1]||500);
+  const items=studentHubItems.slice(offset,offset+limit),total=studentHubItems.length,nextOffset=offset+items.length>=total?null:offset+items.length;
+  return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({success:true,data:{apiVersion:'v1',schoolId:'grisek',items,total,limit,offset,nextOffset,syncCursor:12}})};
+ }},PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties[k]||null,setProperty:(k,v)=>properties[k]=v})},
  SpreadsheetApp:{getActiveSpreadsheet:()=>ss,openById:()=>ss,flush(){}},
  ContentService:{MimeType:{JSON:'json'},createTextOutput:text=>({text,setMimeType(){return this;}})},
- Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:()=> '2026-09-26',computeHmacSha256Signature:(message,key)=>Array.from(crypto.createHmac('sha256',key).update(message).digest()),base64EncodeWebSafe:bytes=>Buffer.from(bytes).toString('base64url')},
+ Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:()=> '2026-09-26'},
  LockService:{getScriptLock:()=>({tryLock(){assert.equal(held,false);held=true;return true;},waitLock(){held=true;},releaseLock(){held=false;}})}});
  vm.runInContext(code,ctx);
  const schema=vm.runInContext('TABLES',ctx);
@@ -32,7 +40,7 @@ function fixture(){
  const call=(p,method='POST')=>JSON.parse(ctx.handleRequest(p,method).text);
  const request=(action,fields={})=>({action,year:'2026',id:crypto.randomUUID(),auth_pwd:properties.ADMIN_PWD,...fields});
  const score=(fields={})=>request('updateScore',{recordId:'result-2026',competitionId:'comp-2026',expectedVersion:1,score:'90',rank:'冠军',...fields});
- return {ctx,ss,sheets,properties,call,request,score,put,rows:n=>ctx.table(ss,n),interrupt:n=>failTarget=n,held:()=>held};
+ return {ctx,ss,sheets,properties,call,request,score,put,rows:n=>ctx.table(ss,n),interrupt:n=>failTarget=n,held:()=>held,studentHubId,studentHubItems,urlFetchCalls};
 }
 test('all mutation endpoints require authentication; GET mutations rejected',()=>{
  const f=fixture();for(const action of ['register','updateScore','batchUpdateScores','deleteRegistration','addCompetition','editCompetition','deleteCompetition','toggleStatus']){
@@ -65,22 +73,49 @@ test('teacher password must be exactly four characters; admin authentication is 
  }
 });
 
-function signedHubRegistration(f, fields={}) {
- const payload=f.request('registerStudentHub',{studentHubId:'1f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a',
-  studentName:'陈小明 TAN XIAO MING',studentClass:'3A',competitionId:'comp-2026',teamId:'',teamName:'',note:'',...fields});
- payload.studentProofExpiresAt=String(Math.floor(Date.now()/1000)+300);
- const message=[payload.id,payload.year,payload.studentHubId,payload.studentName,payload.studentClass,payload.studentProofExpiresAt].join('\n');
- payload.studentHubProof=crypto.createHmac('sha256',f.properties.STUDENT_API_KEY).update(message).digest('base64url');
- return payload;
+function liveHubRegistration(f, fields={}) {
+ return f.request('registerStudentHub',{studentHubId:f.studentHubId,
+  studentName:'伪造姓名',studentClass:'99Z',competitionId:'comp-2026',teamId:'',teamName:'',note:'',...fields});
 }
 test('legacy live-roster sheet writer is retired and leaves the roster unchanged',()=>{
  const f=fixture(),before=JSON.stringify(f.rows('Students'));
  assert.equal(f.call(f.request('syncStudentRoster',{students:[]})).code,'RETIRED');
  assert.equal(JSON.stringify(f.rows('Students')),before);
 });
-test('StudentHub registration accepts a signed live identity without writing the roster sheet',()=>{
+test('StudentHub roster is fetched with the Apps Script secret and normalized for display',()=>{
+ const f=fixture();
+ const result=f.call(f.request('getStudentHubRoster'));
+ assert.equal(result.status,'success');
+ assert.equal(result.data.items[0].studentName,'陈小明 TAN XIAO MING');
+ assert.equal(result.data.items[0].studentClass,'3A');
+ assert.match(f.urlFetchCalls[0].url,/limit=500&offset=0/);
+ assert.equal(f.rows('Students').length,1);
+});
+test('teacher may read the active StudentHub roster',()=>{
+ const f=fixture();
+ const result=f.call(f.request('getStudentHubRoster',{auth_pwd:f.properties.TEACHER_PWD}));
+ assert.equal(result.status,'success');
+ assert.equal(result.data.items.length,1);
+});
+test('StudentHub roster follows nextOffset across pages',()=>{
+ const f=fixture();
+ for(let i=0;i<500;i++)f.studentHubItems.push({id:crypto.randomUUID(),studentId:String(22000+i),name:'STUDENT '+i,chineseName:'学生'+i,className:'Class '+i,updatedAt:''});
+ const result=f.call(f.request('getStudentHubRoster'));
+ assert.equal(result.data.total,501);
+ assert.equal(result.data.items.length,501);
+ assert.equal(f.urlFetchCalls.length,2);
+ assert.match(f.urlFetchCalls[1].url,/offset=500/);
+});
+test('StudentHub roster requires authentication, the configured year, and the server secret',()=>{
+ const f=fixture();
+ assert.equal(f.call({action:'getStudentHubRoster',year:'2026'}).code,'UNAUTHORIZED');
+ assert.equal(f.call(f.request('getStudentHubRoster',{year:'2025'})).code,'ROSTER_YEAR');
+ delete f.properties.STUDENT_API_KEY;
+ assert.equal(f.call(f.request('getStudentHubRoster')).code,'CONFIG');
+});
+test('StudentHub registration resolves trusted live identity and leaves the roster sheet unchanged',()=>{
  const f=fixture();const studentCount=f.rows('Students').length;
- const payload=signedHubRegistration(f);
+ const payload=liveHubRegistration(f);
  const saved=f.call(payload);
  assert.equal(saved.status,'success');
  assert.equal(saved.data.studentId,payload.studentHubId);
@@ -93,16 +128,16 @@ test('StudentHub registration accepts a signed live identity without writing the
  assert.equal(row.studentHubId,payload.studentHubId);
  assert.equal(snapshot.data.rosterYear,'2026');
 });
-test('StudentHub registration requires a valid server signature',()=>{
- const f=fixture();const payload=signedHubRegistration(f);payload.studentHubProof='invalid';
- assert.equal(f.call(payload).code,'FORBIDDEN');
+test('StudentHub registration rejects an ID absent from the live roster without writing',()=>{
+ const f=fixture(),payload=liveHubRegistration(f,{studentHubId:'2f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a'});
+ assert.equal(f.call(payload).code,'NOT_FOUND');
  assert.equal(f.rows('Results').length,1);
  assert.equal(f.rows('Operations').length,0);
 });
 test('StudentHub registration checks old local IDs through the preserved mapping',()=>{
  const f=fixture();const hubId='1f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a';
  f.ss.insertSheet('_StudentHubMap_v1').rows=[['hubStudentId','year','studentId'],[hubId,'2026','student-2026']];
- const payload=signedHubRegistration(f,{studentHubId:hubId});
+ const payload=liveHubRegistration(f,{studentHubId:hubId});
  assert.equal(f.call(payload).code,'CONFLICT');
  assert.equal(f.rows('Results').length,1);
 });
