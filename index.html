@@ -577,7 +577,15 @@
             return 'open';
         };
         
-        const getStudentsByClass = (className) => state.studentDB[className] || [];
+        const englishNameForSort = (name) => String(name || '')
+            .replace(/[\u3400-\u9fff\uf900-\ufaff]/g, '')
+            .trim()
+            .replace(/\s+/g, ' ');
+        const studentNameCollator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+        const getStudentsByClass = (className) => (state.studentDB[className] || []).slice().sort((a, b) => {
+            const byEnglishName = studentNameCollator.compare(englishNameForSort(a), englishNameForSort(b));
+            return byEnglishName || studentNameCollator.compare(a, b);
+        });
 
         // --- 4. 数据一致性衍生状态机 (Computed Properties) ---
         const getAvailableYears = () => Array.from(new Set([currentYear, String(Number(currentYear)+1), state.selectedYear, ...state.availableYears])).sort((a,b)=>b-a);
