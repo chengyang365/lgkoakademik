@@ -58,8 +58,12 @@ test('partial batch removes only acknowledged operations and blocks the correct 
  const f=fixture();await f.run("queueMutations(['a','b','c'].map(recordId=>makeOperation('updateScore',{recordId})))");
  f.partialBatch();await f.run('syncQueueData()');assert.equal(f.state.unsyncedQueue.length,2);assert.equal(f.state.unsyncedQueue[0].recordId,'b');assert.equal(f.state.unsyncedQueue[0].syncStatus,'blocked');assert.equal(f.state.unsyncedQueue[1].recordId,'c');
 });
-test('retired StudentHub manual sync entry cannot break app startup',()=>{
+test('StudentHub roster sync is an explicit administrator action',()=>{
  const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
- assert.doesNotMatch(html,/syncStudentRosterFromHub|isRosterSyncing/);
- assert.match(html,/在教师或管理员登录后从 StudentHub 实时读取，无需手动同步/);
+ const sync=fs.readFileSync(path.join(root,'app-sync.js'),'utf8');
+ assert.match(html,/onclick="app\.syncStudentRoster\(\)"/);
+ assert.match(html,/state\.role === 'admin'/);
+ assert.match(sync,/state\.role !== 'admin'/);
+ assert.match(sync,/fetch\('\/api\/sync-students'/);
+ assert.doesNotMatch(sync,/fetch\('\/api\/students'/);
 });

@@ -3,6 +3,7 @@
 let storageFault = false;
 let refreshSequence = 0;
 let syncing = false;
+let rosterSyncing = false;
 const safeJSON = (key, fallback) => {
     try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
     catch (_) { storageFault = true; return fallback; }
@@ -100,20 +101,9 @@ const fetchAllData = async (background = false) => {
         state.unsyncedQueue=loadOutbox();
         state.dbResults=credential ? mergePending(snapshot.results) : [];
         state.studentRows=[]; state.studentDB={}; state.classList=[];
-        let roster=(credential ? snapshot.students : []).map(s=>({...s,source:'local'}));
-        if (credential && String(snapshot.rosterYear || '') === year) {
-            const rosterResponse=await fetch('/api/students', {
-                method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
-                cache:'no-store', body:JSON.stringify({year,auth_pwd:credential})
-            });
-            let rosterResult;
-            try { rosterResult=await rosterResponse.json(); } catch (_) { throw new Error('StudentHub 名单服务返回了无效响应。'); }
-            if (!rosterResponse.ok || rosterResult.success!==true || !rosterResult.data || !Array.isArray(rosterResult.data.items)) {
-                const error=new Error(rosterResult.message || 'StudentHub 实时名单读取失败。');
-                error.code=rosterResult.code || 'ROSTER_UNAVAILABLE'; throw error;
-            }
-            roster=rosterResult.data.items.map(s=>({...s,source:'studenthub'}));
-        }
+        const roster=(credential ? snapshot.students : []).map(s=>({...s,source:'local'}));
+        state.rosterYear=String(snapshot.rosterYear || '');
+        state.lastRosterSync=snapshot.rosterLastSync || '';
         state.studentRows=roster; state.studentDB={};
         for(const s of roster) (state.studentDB[s.studentClass] ||= []).push(s.studentName);
         state.classList=Object.keys(state.studentDB).sort();
@@ -128,6 +118,33 @@ const fetchAllData = async (background = false) => {
         if(seq===refreshSequence) {state.isInitializing=false;state.isRefreshing=false;updateDOM();}
     }
 };
+const syncStudentRoster = async () => {
+    if (!state.adminPwd || state.role !== 'admin') { showToast('只有管理员可以同步学生名单。','warning'); return; }
+    if (rosterSyncing) return;
+    const year=String(state.selectedYear);
+    if (String(state.rosterYear || '') !== year) { showToast('当前年度未配置 StudentHub 名单同步。','warning'); return; }
+    rosterSyncing=true; state.isRosterSyncing=true; updateDOM();
+    try {
+        const response=await fetch('/api/sync-students', {
+            method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+            cache:'no-store', body:JSON.stringify({year,auth_pwd:state.adminPwd})
+        });
+        let result;
+        try { result=await response.json(); } catch (_) { throw new Error('名单同步服务返回了无效响应。'); }
+        if (!response.ok || result.success!==true || !result.data) {
+            const error=new Error(result.message || 'StudentHub 名单同步失败。');
+            error.code=result.code || 'ROSTER_UNAVAILABLE'; throw error;
+        }
+        await fetchAllData(false);
+        const stats=result.data;
+        showToast('名单同步完成：新增 '+Number(stats.added||0)+'，更新 '+Number(stats.updated||0)+'，离校 '+Number(stats.deactivated||0)+'。','success');
+    } catch(e) {
+        showToast(e.message || '学生名单同步失败。','error');
+    } finally {
+        rosterSyncing=false; state.isRosterSyncing=false; updateDOM();
+    }
+};
+
 const initLocalCache = () => {
     const snapshot=safeJSON(cacheKey(state.selectedYear),null);
     if(snapshot && Array.isArray(snapshot.competitions)) { state.competitionItems=snapshot.competitions;state.availableYears=snapshot.years || []; }

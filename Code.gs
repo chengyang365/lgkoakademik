@@ -161,28 +161,41 @@ function handleRequest(p, method) {
       if (isWrite && ['register', 'registerStudentHub', 'updateScore', 'batchUpdateScores'].indexOf(action) < 0 && role !== 'admin') fail('FORBIDDEN', 'Administrator permission required.');
     }
     if (action === 'verifyPassword') return jsonResponse({ status: 'success', role: role, version: SCRIPT_VERSION });
-    if (isRosterSync) fail('RETIRED', 'Student roster is read live from StudentHub; refresh the application.');
     var year = yearOf(p);
-    var hubStudent = null;
-    if (isStudentHubRoster || action === 'registerStudentHub') {
-      if (value(props().getProperty('ROSTER_YEAR')) !== year) fail('ROSTER_YEAR', 'This year does not use the live StudentHub roster.');
-      var roster = readStudentHubRoster();
-      if (isStudentHubRoster) {
-        return jsonResponse({ status: 'success', data: {
-          items: roster.items, total: roster.total, schoolId: roster.schoolId, syncCursor: roster.syncCursor
-        }, version: SCRIPT_VERSION });
-      }
-      var hubId = textField(p.studentHubId, 'StudentHub student ID', 100, true);
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(hubId)) fail('VALIDATION', 'Invalid StudentHub student ID.');
-      hubStudent = roster.items.find(function(student) { return student.id === hubId; });
-      if (!hubStudent) fail('NOT_FOUND', 'This student is no longer in the active StudentHub roster.');
+    var isHubRosterAction = isRosterSync || isStudentHubRoster || action === 'registerStudentHub';
+    if (isHubRosterAction && value(props().getProperty('ROSTER_YEAR')) !== year) {
+      fail('ROSTER_YEAR', 'This year is not configured for the StudentHub roster.');
     }
     var ss = database();
     if (props().getProperty('SCHEMA_VERSION') !== SCRIPT_VERSION) fail('MIGRATION_REQUIRED', 'Run migration in the script editor.');
-    // Read snapshots use the same lock to avoid seeing half-completed journal writes.
+    // Only the explicit admin sync action reads from StudentHub. Ordinary reads and registrations use Students_v7.
+    var incomingRoster = null;
+    if (isRosterSync) {
+      incomingRoster = readStudentHubRoster();
+      if (!incomingRoster.items.length) fail('ROSTER_EMPTY', 'StudentHub returned an empty roster; no changes were made.');
+    }
+    // Use the same lock for cached reads and writes to avoid seeing half-completed sheet updates.
     lock = LockService.getScriptLock();
     if (!lock.tryLock(15000)) { lock = null; fail('BUSY', 'System busy. Retry later.'); }
     recoverPrepared(ss);
+    if (isRosterSync) {
+      return jsonResponse({ status: 'success', data: syncStudentRosterToSheet(ss, year, incomingRoster), version: SCRIPT_VERSION });
+    }
+    if (isStudentHubRoster) {
+      var cachedRoster = readCachedStudentHubRoster(ss, year);
+      return jsonResponse({ status: 'success', data: {
+        items: cachedRoster, total: cachedRoster.length,
+        schoolId: props().getProperty('STUDENT_HUB_SCHOOL_ID') || '',
+        syncCursor: Number(props().getProperty('STUDENT_HUB_SYNC_CURSOR') || 0)
+      }, version: SCRIPT_VERSION });
+    }
+    var hubStudent = null;
+    if (action === 'registerStudentHub') {
+      var hubId = textField(p.studentHubId, 'StudentHub student ID', 100, true);
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(hubId)) fail('VALIDATION', 'Invalid StudentHub student ID.');
+      hubStudent = findCachedStudentHubStudent(ss, year, hubId);
+      if (!hubStudent) fail('NOT_FOUND', 'This student is not in the last manually synchronized roster.');
+    }
     if (action === 'batchUpdateScores') {
       if (!Array.isArray(p.operations) || p.operations.length < 1 || p.operations.length > 20) fail('VALIDATION', 'Batch must contain 1–20 score operations.');
       var outcomes = [];
@@ -193,7 +206,7 @@ function handleRequest(p, method) {
           outcomes.push(Object.assign({ id:item.id }, writeAction(ss,item,year,role)));
         } catch (error) {
           outcomes.push({ id:item && item.id, status:'error', code:error.code || 'SERVER', message:error.code ? error.message : 'Retry this operation with the same ID.' });
-          break; // Earlier receipts remain committed; untouched operations stay in the client outbox.
+          break;
         }
       }
       return jsonResponse({ status:'success', outcomes:outcomes });
@@ -216,7 +229,11 @@ function handleRequest(p, method) {
         studentClass: fallbackClass, studentHubId: studentHubId, category: comp.name });
     });
     var years = Array.from(new Set(table(ss, 'Competitions').filter(function(r) { return value(r.deleted) !== 'true'; }).map(function(r) { return value(r.year); }).concat([year]))).sort();
-    if (action === 'getSnapshot') return jsonResponse({ status: 'success', data: { competitions: comps, students: students, results: visible, years: years, authenticated: !!role, rosterYear: value(props().getProperty('ROSTER_YEAR')) }, version: SCRIPT_VERSION });
+    if (action === 'getSnapshot') return jsonResponse({ status: 'success', data: {
+      competitions: comps, students: students, results: visible, years: years,
+      authenticated: !!role, rosterYear: value(props().getProperty('ROSTER_YEAR')),
+      rosterLastSync: props().getProperty('STUDENT_HUB_LAST_SYNC_AT') || ''
+    }, version: SCRIPT_VERSION });
     if (action === 'getCompetitions') return jsonResponse({ status: 'success', data: comps });
     if (action === 'getStudents' || action === 'getResults') {
       if (!role) fail('UNAUTHORIZED', 'Sign in to view student records.');
@@ -270,6 +287,142 @@ function localStudentIdsForHub(ss, year, hubId) {
   if (rows.length > 1) fail('SCHEMA', 'Duplicate StudentHub mapping.');
   return rows.map(function(m) { return m.studentId; });
 }
+function ensureStudentHubMapSheet(ss) {
+  var sheet = ss.getSheetByName('_StudentHubMap_v1');
+  if (!sheet) sheet = ss.insertSheet('_StudentHubMap_v1');
+  var data = sheet.getDataRange().getValues();
+  var headers = ['hubStudentId','year','studentId'];
+  if (!data.length || !data[0] || data[0].every(function(v) { return value(v) === ''; })) {
+    sheet.clearContents();
+    sheet.getRange(1,1,1,headers.length).setValues([headers]);
+  }
+  return sheet;
+}
+function writeSheetRows(sheet, rows, width) {
+  sheet.clearContents();
+  if (rows.length) sheet.getRange(1,1,rows.length,width).setValues(rows);
+}
+function readCachedStudentHubRoster(ss, year) {
+  var students = table(ss, 'Students').filter(function(r) { return active(r, year); });
+  var byId = {};
+  students.forEach(function(student) { byId[value(student.id)] = student; });
+  var items = [];
+  var seen = new Set();
+  readStudentHubMappings(ss).filter(function(m) { return m.year === year; }).forEach(function(mapping) {
+    var student = byId[mapping.studentId];
+    if (!student || seen.has(mapping.hubStudentId)) return;
+    seen.add(mapping.hubStudentId);
+    items.push({id:mapping.hubStudentId,studentName:value(student.studentName),studentClass:value(student.studentClass)});
+  });
+  // Older imported sheets may use the StudentHub UUID as the local ID and predate the mapping tab.
+  students.forEach(function(student) {
+    var id = value(student.id);
+    if (!seen.has(id) && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      seen.add(id);
+      items.push({id:id,studentName:value(student.studentName),studentClass:value(student.studentClass)});
+    }
+  });
+  return items;
+}
+function findCachedStudentHubStudent(ss, year, hubId) {
+  var localIds = localStudentIdsForHub(ss, year, hubId);
+  var localId = localIds.length ? localIds[0] : hubId;
+  var student = table(ss, 'Students').find(function(r) {
+    return value(r.id) === localId && active(r, year);
+  });
+  return student ? {id:hubId,localStudentId:value(student.id),studentName:value(student.studentName),studentClass:value(student.studentClass)} : null;
+}
+function syncStudentRosterToSheet(ss, year, roster) {
+  if (!roster || !Array.isArray(roster.items) || !roster.items.length) fail('ROSTER_EMPTY', 'StudentHub returned an empty roster; no changes were made.');
+  var priorCursor = Number(props().getProperty('STUDENT_HUB_SYNC_CURSOR') || -1);
+  if (Number.isFinite(priorCursor) && priorCursor > roster.syncCursor) fail('ROSTER_STALE', 'StudentHub returned an older roster snapshot; no changes were made.');
+  var studentSheet = ss.getSheetByName('Students_v7');
+  if (!studentSheet) fail('MIGRATION_REQUIRED', 'Run migrateLegacyDatabase from the script editor first.');
+  var mapSheet = ensureStudentHubMapSheet(ss);
+  var currentStudents = table(ss, 'Students').map(function(r) { return Object.assign({}, r); });
+  var allMappings = readStudentHubMappings(ss);
+  var mappingByKey = {};
+  allMappings.forEach(function(m) { mappingByKey[JSON.stringify([m.year,m.hubStudentId])] = m; });
+  var studentById = new Map();
+  currentStudents.forEach(function(r) {
+    var id = value(r.id);
+    if (studentById.has(id)) fail('SCHEMA', 'Duplicate student ID in Students_v7.');
+    studentById.set(id, r);
+  });
+  var syncId = 'sync_' + Utilities.getUuid();
+  var incomingLocalIds = new Set(), seenHubIds = new Set();
+  var added = 0, updated = 0, deactivated = 0;
+  var studentRows = currentStudents;
+  var nextMappings = Object.assign({}, mappingByKey);
+  roster.items.forEach(function(item) {
+    var hubId = value(item.id);
+    if (!hubId || seenHubIds.has(hubId)) fail('ROSTER_SCHEMA', 'StudentHub returned a duplicate or blank student ID.');
+    seenHubIds.add(hubId);
+    var key = JSON.stringify([year,hubId]);
+    var mapping = mappingByKey[key];
+    var existing = mapping ? studentById.get(mapping.studentId) : studentById.get(hubId);
+    if (existing && value(existing.year) !== year) {
+      if (mapping) fail('SCHEMA', 'Student mapping points to a different year.');
+      existing = null;
+    }
+    var localId = existing ? value(existing.id) : (mapping ? mapping.studentId : Utilities.getUuid());
+    if (studentById.has(localId) && value(studentById.get(localId).year) !== year) fail('SCHEMA', 'Student ID is already used by another year.');
+    incomingLocalIds.add(localId);
+    if (existing) {
+      var changed = value(existing.studentName) !== value(item.studentName)
+        || value(existing.studentClass) !== value(item.studentClass)
+        || value(existing.deleted) === 'true';
+      if (changed) {
+        existing.studentName = item.studentName;
+        existing.studentClass = item.studentClass;
+        existing.deleted = false;
+        existing.version = Number(existing.version) + 1;
+        existing.lastOperationId = syncId;
+        updated++;
+      }
+    } else {
+      existing = {id:localId,year:year,studentClass:item.studentClass,studentName:item.studentName,
+        version:1,deleted:false,lastOperationId:syncId};
+      studentById.set(localId, existing);
+      studentRows.push(existing);
+      added++;
+    }
+    nextMappings[key] = {hubStudentId:hubId,year:year,studentId:localId};
+  });
+  studentRows.forEach(function(student) {
+    if (value(student.year) === year && value(student.deleted) !== 'true' && !incomingLocalIds.has(value(student.id))) {
+      student.deleted = true;
+      student.version = Number(student.version) + 1;
+      student.lastOperationId = syncId;
+      deactivated++;
+    }
+  });
+  var mappingRows = [ ['hubStudentId','year','studentId'] ];
+  Object.keys(nextMappings).forEach(function(key) {
+    var mapping = nextMappings[key];
+    mappingRows.push([cell(mapping.hubStudentId),cell(mapping.year),cell(mapping.studentId)]);
+  });
+  var studentValues = [TABLES.Students].concat(studentRows.map(function(student) {
+    return TABLES.Students.map(function(key) { return cell(student[key]); });
+  }));
+  var oldStudents = studentSheet.getDataRange().getValues();
+  var oldMappings = mapSheet.getDataRange().getValues();
+  try {
+    writeSheetRows(mapSheet, mappingRows, 3);
+    writeSheetRows(studentSheet, studentValues, TABLES.Students.length);
+  } catch (e) {
+    try {
+      writeSheetRows(studentSheet, oldStudents, TABLES.Students.length);
+      writeSheetRows(mapSheet, oldMappings, 3);
+    } catch (restoreError) {}
+    throw e;
+  }
+  props().setProperty('STUDENT_HUB_SYNC_CURSOR', String(roster.syncCursor));
+  props().setProperty('STUDENT_HUB_SCHOOL_ID', roster.schoolId || '');
+  props().setProperty('STUDENT_HUB_LAST_SYNC_AT', new Date().toISOString());
+  return {added:added,updated:updated,deactivated:deactivated,total:roster.items.length,
+    schoolId:roster.schoolId || '',syncCursor:roster.syncCursor};
+}
 function writeAction(ss, p, year, role, hubStudent) {
   if (!/^[A-Za-z0-9_-]{10,100}$/.test(value(p.id))) fail('VALIDATION', 'A unique operation ID is required.');
   var request = requestKey(p);
@@ -319,8 +472,8 @@ function writeAction(ss, p, year, role, hubStudent) {
         var localIds = localStudentIdsForHub(ss, year, studentHubId);
         var possibleIds = [studentHubId].concat(localIds);
         if (rows.some(function(r) { return active(r, year) && r.competitionId === comp.id && possibleIds.indexOf(value(r.studentId)) >= 0; })) fail('CONFLICT', 'Student already registered. Refresh to review.');
-        resultStudentId = studentHubId;
-        student = {id:studentHubId,studentName:studentName,studentClass:studentClass};
+        resultStudentId = value(hubStudent.localStudentId) || studentHubId;
+        student = {id:resultStudentId,studentName:studentName,studentClass:studentClass};
       } else {
         student = table(ss, 'Students').find(function(s) { return s.id === p.studentId && active(s, year); });
         if (!student) fail('VALIDATION', 'Student not found in this year.');

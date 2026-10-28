@@ -54,17 +54,15 @@
 - 测试 GET 写入、无密码评分/删除都被拒绝。
 - 查看 `Operations_v7`，确认有操作 ID、角色、前后值和完成时间，且没有密码。
 
-## 5. StudentHub 实时学生名册
+## 5. StudentHub 名单手动同步
 
-当前年度名册直接从 `https://lgstudenthub.vercel.app/api/students` 读取。StudentHub 密钥只保存在 Apps Script「项目设置 → 脚本属性」的 `STUDENT_API_KEY`；Vercel 和网页均不保存该密钥。
+StudentHub 是名册来源；只有管理员在后台点击“同步学生名单”时，Apps Script 才会读取 StudentHub，并把当前年度名单写入 `Students_v7`。教师登录、页面刷新、查看报名和提交报名只读上次同步的本地名单，不会自动请求 StudentHub。
 
-1. 设置 `ROSTER_YEAR=2026`（以实际当前名册年度为准），并将 StudentHub 专用密钥保存为 Apps Script 脚本属性 `STUDENT_API_KEY`。
-2. Apps Script 在服务端使用该密钥分页读取 StudentHub 名单。Vercel 只把已登录的名单请求和报名请求转发到 Apps Script，不读取名单、不生成 HMAC，也不接触 StudentHub 密钥。
-3. 报名请求只提交学生 UUID；Apps Script 会重新读取当前在册名单，按 UUID 查出姓名和班级，再写入 `Results_v7` 的成绩快照。浏览器提供的姓名和班级不会被信任。显示格式为“中文名 英文名”，没有中文名时只显示英文名。
-4. `Students_v7` 和原始 `Students` 标签保留不动，历史结果与历史年度名册不清除。当前年度名单来自 StudentHub，不需要手动同步或把名单复制进表格。
-5. Apps Script 更新后创建新版 Web App 部署；执行身份继续为部署者，访问者设置保持“任何人”。如编辑器要求授权，请授权外部请求。Vercel 只需保留 `APPS_SCRIPT_URL`；确认新部署的读名单与测试报名成功后，可以删除 Vercel 中旧的 `STUDENT_API_KEY` 和 `STUDENT_API_URL` 环境变量，再重新部署一次。
-
-Apps Script 的 URL Fetch 有每日配额；本系统每次名单读取会按 StudentHub 的分页数发出请求。名册较大或使用量增加时，再添加短期缓存并监控配额。
+1. 设置 `ROSTER_YEAR=2026`（以实际年度为准），并将 StudentHub 专用密钥保存为 Apps Script 脚本属性 `STUDENT_API_KEY`。
+2. Vercel 服务端配置 `APPS_SCRIPT_URL`，指向对应 Apps Script Web App。Vercel 不需要 StudentHub 密钥；网页和请求参数中也不能放该密钥。
+3. 登录竞赛系统管理员账号，确认当前年度与 `ROSTER_YEAR` 一致，再点击“同步学生名单”。Vercel 将请求转发到 Apps Script；Apps Script 在服务端分页读取 StudentHub 并写入 `Students_v7` 和映射标签 `_StudentHubMap_v1`。
+4. 同步按 StudentHub 固定 UUID 更新本地学生映射及姓名，姓名格式为“中文名 英文名”。本次名单缺失的学生会从当前年度活动名册软删除；历史成绩快照、成绩记录和旧年度名册保留。空名单、分页不完整或外部读取失败时同步中止，不会用空结果清除名单。
+5. 同步完成后，系统刷新本地快照并显示新增、更新和离校数量。一般登录、刷新和报名不会发出 StudentHub 请求；需要刷新名册时由管理员再次手动点击同步。
 
 ## 6. 冲突、旧队列与回退
 

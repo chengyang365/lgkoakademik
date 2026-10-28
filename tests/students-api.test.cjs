@@ -3,7 +3,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const studentsHandler=require('../api/students');
 const registerHandler=require('../api/register-student');
-const retiredSyncHandler=require('../api/sync-students');
+const syncHandler=require('../api/sync-students');
 
 const STUDENT_ID='1f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a';
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/test-deployment/exec';
@@ -20,7 +20,7 @@ function withEnv(t,fetcher){
  global.fetch=fetcher;
  t.after(()=>{for(const [k,v]of Object.entries(old)){if(v===undefined)delete process.env[k];else process.env[k]=v;}global.fetch=oldFetch;});
 }
-test('students endpoint proxies the live roster through Apps Script without a Vercel StudentHub key',async t=>{
+test('students endpoint proxies the cached roster through Apps Script without a Vercel StudentHub key',async t=>{
  let payload=null,endpoint=null;
  withEnv(t,async(url,options)=>{
   endpoint=url;payload=JSON.parse(options.body);
@@ -74,7 +74,16 @@ test('registration returns Apps Script rejection when a student is no longer act
  assert.equal(res.statusCode,404);assert.equal(res.body.code,'NOT_FOUND');
  assert.equal(payload.action,'registerStudentHub');
 });
-test('old bulk-write route is disabled',async()=>{
- const res=mockRes();await retiredSyncHandler({method:'POST',body:{}},res);
- assert.equal(res.statusCode,410);assert.equal(res.body.code,'RETIRED');
+test('manual sync endpoint forwards only year and admin session to Apps Script',async t=>{
+ let payload=null,endpoint=null;
+ withEnv(t,async(url,options)=>{
+  endpoint=url;payload=JSON.parse(options.body);
+  return response({status:'success',data:{added:1,updated:2,deactivated:0,total:3}});
+ });
+ const res=mockRes();
+ await syncHandler({method:'POST',body:{auth_pwd:'admin',year:'2026'}},res);
+ assert.equal(res.statusCode,200);assert.equal(res.body.success,true);
+ assert.equal(res.body.data.added,1);assert.equal(endpoint,APPS_SCRIPT_URL);
+ assert.deepEqual(payload,{action:'syncStudentRoster',year:'2026',auth_pwd:'admin'});
+ assert.equal(process.env.STUDENT_API_KEY,undefined);
 });
