@@ -38,13 +38,13 @@
 不要直接修改 v7 表的 ID、version、deleted、lastOperationId、操作日志或表头。
 手工修改数据会绕过版本和审计保护；应使用应用界面。
 
-## StudentHub 实时学生名册
+## StudentHub 名单手动同步
 
-当前年度名册由 Apps Script 服务端直接从 `https://lgstudenthub.vercel.app/api/students` 读取；API 密钥只存放在 Apps Script 脚本属性 `STUDENT_API_KEY`。Vercel 仅转发请求，不保管密钥或生成验签证明。
+StudentHub 是名册来源；只有管理员在后台点击“同步学生名单”时，Apps Script 才会读取 StudentHub，并把当前年度名单写入 `Students_v7`。教师登录、页面刷新、查看报名和提交报名都只读取表格中上次同步的名单，不会自动请求 StudentHub。
 
-页面登录后从 StudentHub 读取当前名单。报名时只提交学生 UUID；Apps Script 会再次检查 UUID 仍在当前在册名单中，并从 StudentHub 获取可信姓名和班级快照后写入 `Results_v7`。姓名显示为“中文名 英文名”，没有中文名时只显示英文名。
+同步会按 StudentHub 的固定 UUID 更新本地学生映射和姓名（显示为“中文名 英文名”）；本次名单中缺失的学生会从当前年度活动名册软删除，历史成绩快照和历史记录保留。StudentHub 返回空名单或读取失败时，不会清空本地名册。
 
-`Students_v7` 和原始 `Students` 标签继续保留，历史成绩和历史年度数据不变。当前名单无需手动同步或写入表格。StudentHub 暂时不可用或返回无效名单时，系统会停止名单读取/报名并显示错误，不会接受浏览器提交的姓名作为替代。
+学生 API 密钥只保存在 Apps Script 脚本属性 `STUDENT_API_KEY`。Vercel 只把管理员手动同步请求转发到 Apps Script，不读取或保存 StudentHub 密钥。同步按钮只对管理员显示并由后端再次校验管理员权限。
 
 ## 测试
 
