@@ -94,6 +94,9 @@
             activeFilter: 'ongoing', 
             isInitializing: true,
             isRefreshing: false,
+            isRosterSyncing: false,
+            rosterYear: '',
+            lastRosterSync: '',
             isSubmitting: false,
             isAdmin: false,
             adminPwd: '',
@@ -2196,8 +2199,12 @@
                             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                 <div>
                                     <h3 class="font-bold text-emerald-900"><i class="fas fa-users mr-2"></i>StudentHub 学生名单</h3>
-                                    <p class="text-sm text-emerald-800 mt-1">当前年度在册名单会在教师或管理员登录后从 StudentHub 实时读取，无需手动同步。离校学生不进入新报名名单，已有成绩记录会保留。</p>
+                                    <p class="text-sm text-emerald-800 mt-1">只有管理员点击“同步学生名单”时，才会从 StudentHub 读取并更新 Students_v7。教师登录、页面刷新和报名都使用上次同步的名单；离校学生从当前名单移除，历史成绩保留。</p>
+                                    ${state.lastRosterSync ? `<p class="text-xs text-emerald-700 mt-2">上次同步：${escapeHTML(new Date(state.lastRosterSync).toLocaleString())}</p>` : ''}
                                 </div>
+                                ${state.role === 'admin' ? `<button onclick="app.syncStudentRoster()" ${state.isRosterSyncing || String(state.rosterYear || '') !== String(state.selectedYear) ? 'disabled' : ''} class="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i class="fas ${state.isRosterSyncing ? 'fa-spinner fa-spin' : 'fa-rotate'} mr-2"></i>${state.isRosterSyncing ? '同步中…' : '同步学生名单'}
+                                </button>` : ''}
                             </div>
                         </div>
                         <div class="mb-8 bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -2549,6 +2556,7 @@
             handleModalConfirm,
             handleModalCancel,
             syncQueueData,
+            syncStudentRoster,
             refreshData: (background = false) => fetchAllData(background)
         };
 
