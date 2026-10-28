@@ -154,6 +154,7 @@
                 btn_exit_admin: "退出管理",
                 label_ongoing: "进行中",
                 label_registered: "已报",
+                msg_login_to_view_count: "登录后查看人数",
                 unit_person: "人",
                 msg_no_competitions: "目前暂无符合条件的比赛",
                 btn_goto_add: "前往后台添加",
@@ -261,6 +262,7 @@
                 btn_exit_admin: "Keluar Admin",
                 label_ongoing: "Berjalan",
                 label_registered: "Daftar",
+                msg_login_to_view_count: "Log masuk untuk melihat jumlah",
                 unit_person: "org",
                 msg_no_competitions: "Tiada acara",
                 btn_goto_add: "Tambah Acara",
@@ -368,6 +370,7 @@
                 btn_exit_admin: "Exit Admin",
                 label_ongoing: "Ongoing",
                 label_registered: "Reg",
+                msg_login_to_view_count: "Log in to view count",
                 unit_person: "pax",
                 msg_no_competitions: "No competitions available",
                 btn_goto_add: "Add New",
@@ -1536,7 +1539,7 @@
                             
                             <div class="mt-auto w-full pt-4 border-t flex justify-between items-center px-2 ${group.effectiveStatus !== 'open' ? 'border-slate-200' : 'border-slate-50'}">
                                 ${group.effectiveStatus === 'open' ? statusBadge : '<span></span>'}
-                                <div class="text-slate-500 text-sm font-medium">${t('label_registered')}: <span class="text-xl font-black ml-1 ${group.effectiveStatus !== 'open' ? 'text-slate-600' : 'text-indigo-600'}">${group.totalCount}</span></div>
+                                <div class="text-slate-500 text-sm font-medium">${t('label_registered')}: <span class="ml-1 ${state.role ? 'text-xl font-black' : 'text-xs font-semibold'} ${group.effectiveStatus !== 'open' ? 'text-slate-600' : 'text-indigo-600'}">${state.role ? group.totalCount : escapeHTML(t('msg_login_to_view_count'))}</span></div>
                             </div>
                         </div>
                     `;
