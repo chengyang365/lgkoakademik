@@ -37,7 +37,7 @@ test('register proxy forwards only the selected StudentHub UUID and registration
   assert.equal(sent.studentHubProof,undefined);
   assert.equal(process.env.STUDENT_API_KEY,undefined);
 });
-test('roster proxy delegates live roster reads to the authenticated Apps Script action',async t=>{
+test('roster proxy delegates authenticated cached roster reads to the authenticated Apps Script action',async t=>{
   let sent=null;
   global.fetch=async(_url,options)=>{
     sent=JSON.parse(options.body);
