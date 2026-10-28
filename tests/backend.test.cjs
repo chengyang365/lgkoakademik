@@ -36,7 +36,7 @@ function fixture(){
  const base={year:'2026',version:1,deleted:false,lastOperationId:'seed'};
  put('Competitions',{...base,id:'comp-2026',name:'Speech',organizer:'School',status:'open',startDate:'',endDate:''});
  put('Students',{...base,id:'student-2026',studentClass:'1A',studentName:'Alice'});
- put('Results',{...base,id:'result-2026',studentId:'student-2026',competitionId:'comp-2026',teamId:'',teamName:'',score:0,rank:'',note:'original'});
+ put('Results',{...base,id:'result-2026',studentId:'student-2026',competitionId:'comp-2026',teamId:'',teamName:'',score:0,rank:'',note:'original',studentNameSnapshot:'Alice',studentClassSnapshot:'1A',studentStatus:'active'});
  const call=(p,method='POST')=>JSON.parse(ctx.handleRequest(p,method).text);
  const request=(action,fields={})=>({action,year:'2026',id:crypto.randomUUID(),auth_pwd:properties.ADMIN_PWD,...fields});
  const score=(fields={})=>request('updateScore',{recordId:'result-2026',competitionId:'comp-2026',expectedVersion:1,score:'90',rank:'冠军',...fields});
@@ -73,73 +73,105 @@ test('teacher password must be exactly four characters; admin authentication is 
  }
 });
 
-function liveHubRegistration(f, fields={}) {
+function hubRegistration(f, fields={}) {
  return f.request('registerStudentHub',{studentHubId:f.studentHubId,
   studentName:'伪造姓名',studentClass:'99Z',competitionId:'comp-2026',teamId:'',teamName:'',note:'',...fields});
 }
-test('legacy live-roster sheet writer is retired and leaves the roster unchanged',()=>{
- const f=fixture(),before=JSON.stringify(f.rows('Students'));
- assert.equal(f.call(f.request('syncStudentRoster',{students:[]})).code,'RETIRED');
- assert.equal(JSON.stringify(f.rows('Students')),before);
-});
-test('StudentHub roster is fetched with the Apps Script secret and normalized for display',()=>{
+function syncRoster(f, auth_pwd=f.properties.ADMIN_PWD, year='2026') {
+ return f.call({action:'syncStudentRoster',year,auth_pwd});
+}
+test('routine snapshots and cached roster reads never contact StudentHub',()=>{
  const f=fixture();
- const result=f.call(f.request('getStudentHubRoster'));
- assert.equal(result.status,'success');
- assert.equal(result.data.items[0].studentName,'陈小明 TAN XIAO MING');
- assert.equal(result.data.items[0].studentClass,'3A');
- assert.match(f.urlFetchCalls[0].url,/limit=500&offset=0/);
+ assert.equal(f.call(f.request('getSnapshot')).status,'success');
+ assert.equal(f.call(f.request('getStudentHubRoster')).status,'success');
+ assert.equal(f.urlFetchCalls.length,0);
  assert.equal(f.rows('Students').length,1);
 });
-test('teacher may read the active StudentHub roster',()=>{
- const f=fixture();
- const result=f.call(f.request('getStudentHubRoster',{auth_pwd:f.properties.TEACHER_PWD}));
- assert.equal(result.status,'success');
- assert.equal(result.data.items.length,1);
+test('only an authenticated administrator can manually sync the roster',()=>{
+ const f=fixture(),before=JSON.stringify(f.rows('Students'));
+ assert.equal(syncRoster(f,f.properties.TEACHER_PWD).code,'FORBIDDEN');
+ assert.equal(syncRoster(f,'').code,'UNAUTHORIZED');
+ assert.equal(f.urlFetchCalls.length,0);
+ assert.equal(JSON.stringify(f.rows('Students')),before);
 });
-test('StudentHub roster follows nextOffset across pages',()=>{
+test('admin manual sync writes the cached roster and soft-deactivates missing students',()=>{
+ const f=fixture();
+ const result=syncRoster(f);
+ assert.equal(result.status,'success');
+ assert.deepEqual(result.data,{added:1,updated:0,deactivated:1,total:1,schoolId:'grisek',syncCursor:12});
+ assert.equal(f.urlFetchCalls.length,1);
+ assert.match(f.urlFetchCalls[0].url,/limit=500&offset=0/);
+ const students=f.rows('Students');
+ const imported=students.find(s=>s.studentName==='陈小明 TAN XIAO MING');
+ const former=students.find(s=>s.studentName==='Alice');
+ assert.ok(imported);assert.equal(imported.studentClass,'3A');assert.equal(imported.deleted,false);
+ assert.ok(former);assert.equal(former.deleted,true);
+ const snapshot=f.call(f.request('getSnapshot'));
+ assert.equal(snapshot.data.students.some(s=>s.id===imported.id),true);
+ assert.equal(snapshot.data.results[0].studentNameSnapshot,'Alice');
+ assert.equal(f.rows('Results').length,1);
+ const cached=f.call(f.request('getStudentHubRoster'));
+ assert.equal(cached.data.items[0].id,f.studentHubId);
+ assert.equal(cached.data.items[0].studentName,'陈小明 TAN XIAO MING');
+ assert.equal(f.urlFetchCalls.length,1);
+});
+test('manual sync fetches every StudentHub page only after the admin action',()=>{
  const f=fixture();
  for(let i=0;i<500;i++)f.studentHubItems.push({id:crypto.randomUUID(),studentId:String(22000+i),name:'STUDENT '+i,chineseName:'学生'+i,className:'Class '+i,updatedAt:''});
- const result=f.call(f.request('getStudentHubRoster'));
+ assert.equal(f.call(f.request('getStudentHubRoster')).data.items.length,0);
+ assert.equal(f.urlFetchCalls.length,0);
+ const result=syncRoster(f);
  assert.equal(result.data.total,501);
- assert.equal(result.data.items.length,501);
  assert.equal(f.urlFetchCalls.length,2);
  assert.match(f.urlFetchCalls[1].url,/offset=500/);
 });
-test('StudentHub roster requires authentication, the configured year, and the server secret',()=>{
+test('manual sync requires the configured year and Apps Script server key',()=>{
  const f=fixture();
- assert.equal(f.call({action:'getStudentHubRoster',year:'2026'}).code,'UNAUTHORIZED');
- assert.equal(f.call(f.request('getStudentHubRoster',{year:'2025'})).code,'ROSTER_YEAR');
+ assert.equal(f.call({action:'syncStudentRoster',year:'2026'}).code,'UNAUTHORIZED');
+ assert.equal(syncRoster(f,f.properties.ADMIN_PWD,'2025').code,'ROSTER_YEAR');
  delete f.properties.STUDENT_API_KEY;
- assert.equal(f.call(f.request('getStudentHubRoster')).code,'CONFIG');
+ assert.equal(syncRoster(f).code,'CONFIG');
+ assert.equal(f.rows('Students').length,1);
 });
-test('StudentHub registration resolves trusted live identity and leaves the roster sheet unchanged',()=>{
- const f=fixture();const studentCount=f.rows('Students').length;
- const payload=liveHubRegistration(f);
+test('an empty StudentHub response never deactivates the cached roster',()=>{
+ const f=fixture(),before=JSON.stringify(f.rows('Students'));
+ f.studentHubItems.length=0;
+ assert.equal(syncRoster(f).code,'ROSTER_EMPTY');
+ assert.equal(JSON.stringify(f.rows('Students')),before);
+});
+test('StudentHub registration uses the last manually synchronized cached identity',()=>{
+ const f=fixture();syncRoster(f);
+ const studentCount=f.rows('Students').length;
+ const payload=hubRegistration(f);
  const saved=f.call(payload);
  assert.equal(saved.status,'success');
- assert.equal(saved.data.studentId,payload.studentHubId);
+ assert.notEqual(saved.data.studentId,payload.studentHubId);
  assert.equal(saved.data.studentNameSnapshot,'陈小明 TAN XIAO MING');
  assert.equal(saved.data.studentClassSnapshot,'3A');
  assert.equal(f.rows('Students').length,studentCount);
+ assert.equal(f.urlFetchCalls.length,1);
  const snapshot=f.call(f.request('getSnapshot'));
- const row=snapshot.data.results.find(r=>r.studentId===payload.studentHubId);
+ const row=snapshot.data.results.find(r=>r.studentId===saved.data.studentId);
  assert.equal(row.studentName,'陈小明 TAN XIAO MING');
  assert.equal(row.studentHubId,payload.studentHubId);
  assert.equal(snapshot.data.rosterYear,'2026');
 });
-test('StudentHub registration rejects an ID absent from the live roster without writing',()=>{
- const f=fixture(),payload=liveHubRegistration(f,{studentHubId:'2f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a'});
+test('StudentHub registration rejects an ID absent from the cached roster without fetching the API',()=>{
+ const f=fixture();syncRoster(f);
+ const payload=hubRegistration(f,{studentHubId:'2f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a'});
  assert.equal(f.call(payload).code,'NOT_FOUND');
  assert.equal(f.rows('Results').length,1);
  assert.equal(f.rows('Operations').length,0);
+ assert.equal(f.urlFetchCalls.length,1);
 });
-test('StudentHub registration checks old local IDs through the preserved mapping',()=>{
- const f=fixture();const hubId='1f1b8d54-5c66-4c1f-9f8b-0a6f7c3d8f5a';
+test('StudentHub registration resolves existing local IDs through the mapping',()=>{
+ const f=fixture();const hubId=f.studentHubId;
  f.ss.insertSheet('_StudentHubMap_v1').rows=[['hubStudentId','year','studentId'],[hubId,'2026','student-2026']];
- const payload=liveHubRegistration(f,{studentHubId:hubId});
+ syncRoster(f);
+ const payload=hubRegistration(f,{studentHubId:hubId});
  assert.equal(f.call(payload).code,'CONFLICT');
  assert.equal(f.rows('Results').length,1);
+ assert.equal(f.urlFetchCalls.length,1);
 });
 test('zero score survives snapshot and note saves together with score',()=>{
  const f=fixture();let r=f.call(f.request('getSnapshot'));assert.equal(r.data.results[0].score,'0');
