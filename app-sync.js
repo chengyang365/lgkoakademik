@@ -160,13 +160,23 @@ const changeYear = async e => {
     initLocalCache(); await fetchAllData();
 };
 const makeOperation = (action, fields) => ({...fields, action, id:operationId(), year:state.selectedYear, syncStatus:'pending',createdAt:new Date().toISOString()});
+const registrationKey = item => JSON.stringify([String(item.year),String(item.competitionId),String(item.studentHubId || item.studentId || '')]);
 const queueMutations = async operations => {
     if (!await ensureSignedIn()) return false;
     try {
         await withOutboxLock(async () => {
             const queue=loadOutbox();
+            const queuedRegistrationKeys=new Set(queue.filter(q=>q.action==='register').map(registrationKey));
+            const incomingRegistrationKeys=new Set();
             for(const op of operations) {
-                if(queue.some(q=>q.year===op.year && (op.recordId ? q.recordId===op.recordId : op.action==='register' ? q.action==='register' && q.studentId===op.studentId && q.competitionId===op.competitionId : q.competitionId===op.competitionId))) {
+                if(op.action==='register') {
+                    const studentId=op.studentHubId || op.studentId;
+                    if(!studentId) throw new Error('报名缺少学生唯一编号，请刷新名单后重试。');
+                    const key=registrationKey(op);
+                    if(incomingRegistrationKeys.has(key)) throw new Error('同一项目不能重复报名同一学生。');
+                    if(queuedRegistrationKeys.has(key)) throw new Error('这名学生已有待同步报名，请先处理补传。');
+                    incomingRegistrationKeys.add(key);
+                } else if(queue.some(q=>q.year===op.year && (op.recordId ? q.recordId===op.recordId : q.competitionId===op.competitionId))) {
                     throw new Error('这条记录仍有待同步修改，请先处理补传，避免覆盖。');
                 }
             }
